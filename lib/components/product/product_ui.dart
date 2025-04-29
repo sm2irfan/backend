@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'product.dart';
 import 'product_table.dart'; // Import the new file
+import '../common/app_drawer.dart'; // Import the new drawer component
 
 // Main admin app for product management
 class ProductApp extends StatelessWidget {
@@ -44,6 +45,9 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
   late ProductBloc _productBloc;
   // Add scroll controller for horizontal scrolling
   final ScrollController _horizontalScrollController = ScrollController();
+
+  // Current selected navigation item
+  String _currentPage = 'Products';
 
   @override
   void initState() {
@@ -178,6 +182,15 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
               ),
             ),
           ],
+        ),
+        // Replace the drawer with the new component
+        drawer: AppDrawer(
+          currentPage: _currentPage,
+          onPageSelected: (newPage) {
+            setState(() {
+              _currentPage = newPage;
+            });
+          },
         ),
         body: BlocBuilder<ProductBloc, ProductState>(
           builder: (context, state) {
