@@ -31,23 +31,45 @@ class PaginatedProductTable extends StatefulWidget {
 }
 
 class _PaginatedProductTableState extends State<PaginatedProductTable> {
-  // ScrollController for horizontal scrolling
-  final ScrollController _horizontalScrollController = ScrollController();
+  // controller for vertical scrolling
+  final ScrollController _verticalScrollController = ScrollController();
+  // state for resizable columns & rows
+  late List<double> _columnWidths;
+  double _rowHeight = 60.0;
+
+  @override
+  void initState() {
+    super.initState();
+    // initialize 11 columns at 120px each
+    _columnWidths = List.filled(11, 120.0);
+  }
 
   @override
   void dispose() {
-    // Dispose the controller when the widget is disposed
-    _horizontalScrollController.dispose();
+    _verticalScrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final titles = [
+      'ID',
+      'Created At',
+      'Product',
+      'Price',
+      'Description',
+      'Discount',
+      'Category 1',
+      'Category 2',
+      'Popular',
+      'Matching Words',
+      'Actions',
+    ];
     // Calculate total pages
     final int totalPages = (widget.totalItems / widget.pageSize).ceil();
 
     return Container(
-      color: Colors.grey[300], // Making the background a bit darker
+      color: Colors.grey[300],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -69,218 +91,236 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             child:
                 widget.products.isEmpty
                     ? const Center(child: Text('No products found'))
-                    : Stack(
+                    : Column(
                       children: [
-                        SingleChildScrollView(
-                          child: SizedBox(
-                            width: MediaQuery.of(context).size.width,
-                            child: Scrollbar(
-                              controller: _horizontalScrollController,
-                              thumbVisibility: true,
-                              trackVisibility: true,
-                              thickness: 8,
-                              child: SingleChildScrollView(
-                                controller: _horizontalScrollController,
-                                scrollDirection: Axis.horizontal,
-                                child: DataTable(
-                                  columnSpacing: 16.0,
-                                  headingRowHeight: 48.0,
-                                  dataRowMinHeight: 64.0,
-                                  dataRowMaxHeight: 72.0,
-                                  columns: const [
-                                    DataColumn(label: Text('ID')),
-                                    DataColumn(label: Text('Created At')),
-                                    DataColumn(label: Text('Product')),
-                                    DataColumn(label: Text('Price')),
-                                    DataColumn(label: Text('Description')),
-                                    DataColumn(label: Text('Discount')),
-                                    DataColumn(label: Text('Category 1')),
-                                    DataColumn(label: Text('Category 2')),
-                                    DataColumn(label: Text('Popular')),
-                                    DataColumn(label: Text('Matching Words')),
-                                    DataColumn(label: Text('Actions')),
-                                  ],
-                                  rows:
-                                      widget.products.map((product) {
-                                        return DataRow(
-                                          cells: [
-                                            DataCell(Text('#${product.id}')),
-                                            // Created At column
-                                            DataCell(
-                                              Text(
-                                                '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
-                                              ),
-                                            ),
-                                            // Product name column
-                                            DataCell(
-                                              ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 220,
-                                                    ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    _buildProductThumbnail(
-                                                      product,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        product.name,
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                        maxLines: 2,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            // Price column
-                                            DataCell(
-                                              Text('\$${product.uPrices}'),
-                                            ),
-                                            // Description column
-                                            DataCell(
-                                              ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 200,
-                                                    ),
+                        // header row (fixed, no horizontal scroll)
+                        Table(
+                          border: TableBorder.all(color: Colors.grey),
+                          columnWidths: _columnWidths.asMap().map(
+                            (i, w) => MapEntry(i, FixedColumnWidth(w)),
+                          ),
+                          defaultVerticalAlignment:
+                              TableCellVerticalAlignment.middle,
+                          children: [
+                            TableRow(
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                              ),
+                              children: List.generate(titles.length, (i) {
+                                return MouseRegion(
+                                  cursor: SystemMouseCursors.resizeColumn,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.translucent,
+                                    onHorizontalDragUpdate: (d) {
+                                      setState(() {
+                                        _columnWidths[i] = (_columnWidths[i] +
+                                                d.delta.dx)
+                                            .clamp(50.0, 300.0);
+                                      });
+                                    },
+                                    onVerticalDragUpdate: (d) {
+                                      setState(() {
+                                        _rowHeight = (_rowHeight + d.delta.dy)
+                                            .clamp(40.0, 200.0);
+                                      });
+                                    },
+                                    child: SizedBox(
+                                      height: _rowHeight,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8.0,
+                                          vertical: 12.0,
+                                        ),
+                                        child: Text(
+                                          titles[i],
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                        // scrollable data rows (vertical only)
+                        Expanded(
+                          child: Table(
+                            border: TableBorder.all(color: Colors.grey),
+                            columnWidths: _columnWidths.asMap().map(
+                              (i, w) => MapEntry(i, FixedColumnWidth(w)),
+                            ),
+                            defaultVerticalAlignment:
+                                TableCellVerticalAlignment.middle,
+                            children: [
+                              for (final product in widget.products)
+                                TableRow(
+                                  children: List.generate(_columnWidths.length, (
+                                    i,
+                                  ) {
+                                    // map column index to the existing cell widget
+                                    Widget cell;
+                                    switch (i) {
+                                      case 0:
+                                        cell = Text('#${product.id}');
+                                        break;
+                                      case 1:
+                                        cell = Text(
+                                          '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
+                                        );
+                                        break;
+                                      case 2:
+                                        cell = ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 220,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _buildProductThumbnail(product),
+                                              const SizedBox(width: 8),
+                                              Expanded(
                                                 child: Text(
-                                                  product.description ?? '',
+                                                  product.name,
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                   maxLines: 2,
                                                 ),
                                               ),
-                                            ),
-                                            // Discount column
-                                            DataCell(
-                                              Text(
-                                                product.discount != null
-                                                    ? '${product.discount}%'
-                                                    : '-',
+                                            ],
+                                          ),
+                                        );
+                                        break;
+                                      case 3:
+                                        cell = Text('\$${product.uPrices}');
+                                        break;
+                                      case 4:
+                                        cell = ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 200,
+                                          ),
+                                          child: Text(
+                                            product.description ?? '',
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
+                                          ),
+                                        );
+                                        break;
+                                      case 5:
+                                        cell = Text(
+                                          product.discount != null
+                                              ? '${product.discount}%'
+                                              : '-',
+                                        );
+                                        break;
+                                      case 6:
+                                        cell = ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 120,
+                                          ),
+                                          child: Text(
+                                            product.category1 ?? '',
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        );
+                                        break;
+                                      case 7:
+                                        cell = ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 120,
+                                          ),
+                                          child: Text(
+                                            product.category2 ?? '',
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        );
+                                        break;
+                                      case 8:
+                                        cell =
+                                            product.popularProduct
+                                                ? const Icon(
+                                                  Icons.star,
+                                                  color: Colors.amber,
+                                                  size: 20,
+                                                )
+                                                : const Text('-');
+                                        break;
+                                      case 9:
+                                        cell = ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 150,
+                                          ),
+                                          child: Text(
+                                            product.matchingWords ?? '',
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        );
+                                        break;
+                                      default:
+                                        cell = Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.edit,
+                                                size: 20,
                                               ),
-                                            ),
-                                            // Category 1 column
-                                            DataCell(
-                                              ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 120,
-                                                    ),
-                                                child: Text(
-                                                  product.category1 ?? '',
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
+                                              constraints: const BoxConstraints(
+                                                maxWidth: 40,
                                               ),
-                                            ),
-                                            // Category 2 column
-                                            DataCell(
-                                              ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 120,
+                                              padding: EdgeInsets.zero,
+                                              onPressed: () {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'Edit: ${product.name}',
                                                     ),
-                                                child: Text(
-                                                  product.category2 ?? '',
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
-                                              ),
-                                            ),
-                                            // Popular column
-                                            DataCell(
-                                              product.popularProduct
-                                                  ? const Icon(
-                                                    Icons.star,
-                                                    color: Colors.amber,
-                                                    size: 20,
-                                                  )
-                                                  : const Text('-'),
-                                            ),
-                                            // Matching Words column
-                                            DataCell(
-                                              ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 150,
-                                                    ),
-                                                child: Text(
-                                                  product.matchingWords ?? '',
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
-                                              ),
-                                            ),
-                                            // Actions column
-                                            DataCell(
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.edit,
-                                                      size: 20,
-                                                    ),
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          maxWidth: 40,
-                                                        ),
-                                                    padding: EdgeInsets.zero,
-                                                    onPressed: () {
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            'Edit: ${product.name}',
-                                                          ),
-                                                        ),
-                                                      );
-                                                    },
                                                   ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                      size: 20,
-                                                      color: Colors.red,
-                                                    ),
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          maxWidth: 40,
-                                                        ),
-                                                    padding: EdgeInsets.zero,
-                                                    onPressed: () {
-                                                      _showDeleteConfirmation(
-                                                        context,
-                                                        product,
-                                                      );
-                                                    },
-                                                  ),
-                                                ],
+                                                );
+                                              },
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                size: 20,
+                                                color: Colors.red,
                                               ),
+                                              constraints: const BoxConstraints(
+                                                maxWidth: 40,
+                                              ),
+                                              padding: EdgeInsets.zero,
+                                              onPressed: () {
+                                                _showDeleteConfirmation(
+                                                  context,
+                                                  product,
+                                                );
+                                              },
                                             ),
                                           ],
                                         );
-                                      }).toList(),
+                                    }
+                                    return SizedBox(
+                                      height: _rowHeight,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8.0,
+                                          vertical: 12.0,
+                                        ),
+                                        child: cell,
+                                      ),
+                                    );
+                                  }),
                                 ),
-                              ),
-                            ),
+                            ],
                           ),
                         ),
-                        if (widget.isLoading)
-                          const Positioned.fill(
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
                       ],
                     ),
           ),
