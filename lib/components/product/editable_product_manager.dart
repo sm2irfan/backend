@@ -12,6 +12,7 @@ class EditableProductManager {
   final TextEditingController discountController = TextEditingController();
   final TextEditingController category1Controller = TextEditingController();
   final TextEditingController category2Controller = TextEditingController();
+  final TextEditingController matchingWordsController = TextEditingController();
   bool editPopular = false;
 
   void startEditing(Product product) {
@@ -22,6 +23,7 @@ class EditableProductManager {
     discountController.text = product.discount?.toString() ?? '';
     category1Controller.text = product.category1 ?? '';
     category2Controller.text = product.category2 ?? '';
+    matchingWordsController.text = product.matchingWords ?? '';
     editPopular = product.popularProduct;
   }
 
@@ -36,33 +38,52 @@ class EditableProductManager {
     discountController.dispose();
     category1Controller.dispose();
     category2Controller.dispose();
+    matchingWordsController.dispose();
   }
 
   // Build editable cells for the table
-  Widget buildEditableNameCell(Product product, Widget thumbnail) {
+  Widget buildEditableNameCell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 250),
-      child: TextField(
-        controller: nameController,
-        decoration: const InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 8),
-          border: InputBorder.none,
+      child: Container(
+        height: 80,
+        child: TextFormField(
+          controller: nameController,
+          style: const TextStyle(fontSize: 13.0),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            border: InputBorder.none,
+            alignLabelWithHint: true,
+          ),
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          expands: true,
         ),
       ),
     );
   }
 
   Widget buildEditablePriceCell() {
-    return TextFormField(
-      controller: priceController,
-      decoration: const InputDecoration(
-        isDense: true,
-        prefix: Text('\$'),
-        contentPadding: EdgeInsets.symmetric(vertical: 8),
-        border: InputBorder.none, // Remove border
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 120),
+      child: Container(
+        height: 80,
+        child: TextFormField(
+          controller: priceController,
+          style: const TextStyle(fontSize: 13.0),
+          decoration: const InputDecoration(
+            isDense: true,
+            prefix: Text('\$'),
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            border: InputBorder.none,
+            alignLabelWithHint: true,
+          ),
+          keyboardType: TextInputType.multiline,
+          maxLines: null,
+          expands: true, // Fill the available space
+        ),
       ),
-      keyboardType: TextInputType.number,
     );
   }
 
@@ -73,6 +94,7 @@ class EditableProductManager {
         height: 80, // Increased height for multiple lines
         child: TextFormField(
           controller: descriptionController,
+          style: const TextStyle(fontSize: 13.0),
           decoration: const InputDecoration(
             isDense: true,
             contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
@@ -88,27 +110,45 @@ class EditableProductManager {
   }
 
   Widget buildEditableDiscountCell() {
-    return TextFormField(
-      controller: discountController,
-      decoration: const InputDecoration(
-        isDense: true,
-        suffix: Text('%'),
-        contentPadding: EdgeInsets.symmetric(vertical: 8),
-        border: InputBorder.none, // Remove border
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 120),
+      child: Container(
+        height: 80,
+        child: TextFormField(
+          controller: discountController,
+          style: const TextStyle(fontSize: 13.0),
+          decoration: const InputDecoration(
+            isDense: true,
+            suffix: Text('%'),
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            border: InputBorder.none,
+            alignLabelWithHint: true,
+          ),
+          keyboardType: TextInputType.number,
+          maxLines: 1,
+          expands: false,
+        ),
       ),
-      keyboardType: TextInputType.number,
     );
   }
 
   Widget buildEditableCategory1Cell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 120),
-      child: TextFormField(
-        controller: category1Controller,
-        decoration: const InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 8),
-          border: InputBorder.none, // Remove border
+      child: Container(
+        height: 80,
+        child: TextFormField(
+          controller: category1Controller,
+          style: const TextStyle(fontSize: 13.0),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            border: InputBorder.none,
+            alignLabelWithHint: true,
+          ),
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          expands: true,
         ),
       ),
     );
@@ -117,12 +157,42 @@ class EditableProductManager {
   Widget buildEditableCategory2Cell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 120),
-      child: TextFormField(
-        controller: category2Controller,
-        decoration: const InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 8),
-          border: InputBorder.none, // Remove border
+      child: Container(
+        height: 80,
+        child: TextFormField(
+          controller: category2Controller,
+          style: const TextStyle(fontSize: 13.0),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            border: InputBorder.none,
+            alignLabelWithHint: true,
+          ),
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          expands: true,
+        ),
+      ),
+    );
+  }
+
+  Widget buildEditableMatchingWordsCell() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: Container(
+        height: 80,
+        child: TextFormField(
+          controller: matchingWordsController,
+          style: const TextStyle(fontSize: 13.0),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            border: InputBorder.none,
+            alignLabelWithHint: true,
+          ),
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          expands: true,
         ),
       ),
     );

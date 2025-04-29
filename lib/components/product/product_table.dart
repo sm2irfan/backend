@@ -45,12 +45,16 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   @override
   void initState() {
     super.initState();
-    // Initialize columns with custom widths
-    _columnWidths = List.filled(11, 120.0);
-    // Make description column wider
-    _columnWidths[2] = 250.0; // Created At column gets more space
-    _columnWidths[4] = 350.0; // Description column gets more space
-    _columnWidths[3] = 300.0; // Product name column gets more space
+    // Initialize columns with custom widths - now for 12 columns (added image column)
+    _columnWidths = List.filled(12, 120.0);
+    // Set custom widths for columns
+    _columnWidths[0] = 80.0; // ID column can be narrower
+    _columnWidths[1] = 120.0; // Created At column
+    _columnWidths[2] = 70.0; // Image column - just for thumbnail
+    _columnWidths[3] = 250.0; // Product name column
+    _columnWidths[4] = 300.0; // Description column gets more space
+    _columnWidths[5] = 350.0; // Description column gets more space
+    _columnWidths[6] = 80.0; // Description column gets more space
   }
 
   void _startEditing(Product product) {
@@ -90,6 +94,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     final titles = [
       'ID',
       'Created At',
+      'Image',
       'Product',
       'Price',
       'Description',
@@ -100,6 +105,14 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       'Matching Words',
       'Actions',
     ];
+
+    // Define smaller text style for the entire table
+    const tableTextStyle = TextStyle(fontSize: 13.0);
+    const tableHeaderStyle = TextStyle(
+      fontSize: 13.0,
+      fontWeight: FontWeight.bold,
+    );
+
     // Calculate total pages
     // final int totalPages = (widget.totalItems / widget.pageSize).ceil();
 
@@ -141,9 +154,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                                       alignment: Alignment.centerLeft,
                                       child: SelectableText(
                                         titles[i],
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                        style: tableHeaderStyle,
                                       ),
                                     ),
                                     // Resize handle (positioned at right edge)
@@ -258,64 +269,64 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
     switch (columnIndex) {
       case 0:
-        return SelectableText('#${product.id}');
+        return SelectableText(
+          '#${product.id}',
+          style: const TextStyle(fontSize: 13.0),
+        );
       case 1:
         return SelectableText(
           '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
+          style: const TextStyle(fontSize: 13.0),
         );
-      case 2:
+      case 2: // Image column
+        return _buildProductThumbnail(product);
+      case 3: // Product name column (no image)
         if (isEditing) {
-          return _editManager.buildEditableNameCell(
-            product,
-            _buildProductThumbnail(product),
-          );
+          return _editManager.buildEditableNameCell();
         } else {
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildProductThumbnail(product),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SelectableText(
-                    product.name,
-                    maxLines: 2,
-                    textAlign: TextAlign.left,
-                  ),
-                ),
-              ],
+            constraints: const BoxConstraints(maxWidth: 250),
+            child: SelectableText(
+              product.name,
+              maxLines: 3,
+              textAlign: TextAlign.left,
+              style: const TextStyle(fontSize: 13.0),
             ),
           );
         }
-      case 3:
+      case 4: // Price column
         if (isEditing) {
           return _editManager.buildEditablePriceCell();
         } else {
-          return SelectableText('\$${product.uPrices}');
+          return SelectableText(
+            '\$${product.uPrices}',
+            style: const TextStyle(fontSize: 13.0),
+          );
         }
-      case 4:
+      case 5: // Description column
         if (isEditing) {
           return _editManager.buildEditableDescriptionCell();
         } else {
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
+            constraints: const BoxConstraints(maxWidth: 300),
             child: SelectableText(
               product.description ?? '',
-              maxLines: 2,
+              maxLines: 3,
               textAlign: TextAlign.left,
+              style: const TextStyle(fontSize: 13.0),
             ),
           );
         }
-      case 5:
+      case 6: // Discount
         if (isEditing) {
           return _editManager.buildEditableDiscountCell();
         } else {
           return SelectableText(
             product.discount != null ? '${product.discount}%' : '-',
+            style: const TextStyle(fontSize: 13.0),
           );
         }
-      case 6:
+      case 7: // Category 1
         if (isEditing) {
           return _editManager.buildEditableCategory1Cell();
         } else {
@@ -325,10 +336,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               product.category1 ?? '',
               maxLines: 1,
               textAlign: TextAlign.left,
+              style: const TextStyle(fontSize: 13.0),
             ),
           );
         }
-      case 7:
+      case 8: // Category 2
         if (isEditing) {
           return _editManager.buildEditableCategory2Cell();
         } else {
@@ -338,10 +350,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               product.category2 ?? '',
               maxLines: 1,
               textAlign: TextAlign.left,
+              style: const TextStyle(fontSize: 13.0),
             ),
           );
         }
-      case 8:
+      case 9: // Popular
         if (isEditing) {
           return _editManager.buildEditablePopularCell((value) {
             setState(() {
@@ -353,15 +366,20 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               ? const Icon(Icons.star, color: Colors.amber, size: 20)
               : const SelectableText('-');
         }
-      case 9:
-        return ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 150),
-          child: SelectableText(
-            product.matchingWords ?? '',
-            maxLines: 1,
-            textAlign: TextAlign.left,
-          ),
-        );
+      case 10: // Matching Words
+        if (isEditing) {
+          return _editManager.buildEditableMatchingWordsCell();
+        } else {
+          return ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: SelectableText(
+              product.matchingWords ?? '',
+              maxLines: 1,
+              textAlign: TextAlign.left,
+              style: const TextStyle(fontSize: 13.0),
+            ),
+          );
+        }
       default: // Actions column
         if (isEditing) {
           return _editManager.buildEditableActionCell(
@@ -389,24 +407,19 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   void _showDeleteConfirmation(BuildContext context, Product product) {
-    showDialog(
+    showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
+          (dialogContext) => AlertDialog(
             title: const Text('Delete Product'),
             content: Text('Are you sure you want to delete "${product.name}"?'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogContext, false),
                 child: const Text('CANCEL'),
               ),
               TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Deleted: ${product.name}')),
-                  );
-                },
+                onPressed: () => Navigator.pop(dialogContext, true),
                 child: const Text(
                   'DELETE',
                   style: TextStyle(color: Colors.red),
@@ -414,6 +427,13 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               ),
             ],
           ),
-    );
+    ).then((confirmed) {
+      if (confirmed == true) {
+        // Show SnackBar after dialog is dismissed, using the original context
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Deleted: ${product.name}')));
+      }
+    });
   }
 }
