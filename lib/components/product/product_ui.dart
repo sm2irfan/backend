@@ -79,9 +79,12 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
             children: [
               Icon(Icons.inventory_2, color: Theme.of(context).primaryColor),
               const SizedBox(width: 12),
-              const Text(
-                'Product Management',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              Flexible(
+                child: const Text(
+                  'Product Management',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -139,43 +142,7 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                             ),
                           ],
                         ),
-                        // Search box - could be expanded in the future
-                        Container(
-                          width: 240,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 12),
-                              Icon(
-                                Icons.search,
-                                color: Colors.grey.shade600,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  decoration: InputDecoration(
-                                    hintText: 'Search products...',
-                                    hintStyle: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey.shade500,
-                                    ),
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        //
                       ],
                     ),
                   );
@@ -236,25 +203,30 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                           constraints: BoxConstraints(
                             minWidth: MediaQuery.of(context).size.width,
                           ),
-                          child: PaginatedProductTable(
-                            products: state.products,
-                            currentPage: state.currentPage,
-                            totalItems: state.totalItems,
-                            pageSize: _pageSize,
-                            hasNextPage: state.hasNextPage,
-                            hasPreviousPage: state.hasPreviousPage,
-                            isLoading:
-                                state is! ProductsLoaded &&
-                                state is ProductLoading,
-                            onPageChanged: (page) {
-                              _productBloc.add(
-                                LoadPaginatedProducts(
-                                  page: page,
-                                  pageSize: _pageSize,
-                                ),
-                              );
-                            },
-                            onPageSizeChanged: _handlePageSizeChange,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                            ),
+                            child: PaginatedProductTable(
+                              products: state.products,
+                              currentPage: state.currentPage,
+                              totalItems: state.totalItems,
+                              pageSize: _pageSize,
+                              hasNextPage: state.hasNextPage,
+                              hasPreviousPage: state.hasPreviousPage,
+                              isLoading:
+                                  state is! ProductsLoaded &&
+                                  state is ProductLoading,
+                              onPageChanged: (page) {
+                                _productBloc.add(
+                                  LoadPaginatedProducts(
+                                    page: page,
+                                    pageSize: _pageSize,
+                                  ),
+                                );
+                              },
+                              onPageSizeChanged: _handlePageSizeChange,
+                            ),
                           ),
                         ),
                       ),
@@ -273,64 +245,158 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                         top: BorderSide(color: Colors.grey, width: 0.5),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Page ${state.currentPage} of $totalPages'),
-                        Row(
-                          children: [
-                            // Page size dropdown added here
-                            DropdownButton<int>(
-                              value: _pageSize,
-                              underline: Container(),
-                              icon: const Icon(
-                                Icons.arrow_drop_down,
-                                color: Colors.grey,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Use compact layout for small screens
+                        if (constraints.maxWidth < 400) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Page ${state.currentPage} of $totalPages'),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  // Dropdown with shorter text
+                                  DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      value: _pageSize,
+                                      isDense: true,
+                                      icon: const Icon(
+                                        Icons.arrow_drop_down,
+                                        color: Colors.grey,
+                                        size: 18,
+                                      ),
+                                      items:
+                                          const [20, 50, 75, 100].map((
+                                            int size,
+                                          ) {
+                                            return DropdownMenuItem<int>(
+                                              value: size,
+                                              child: Text('$size'),
+                                            );
+                                          }).toList(),
+                                      onChanged: (int? newValue) {
+                                        if (newValue != null &&
+                                            newValue != _pageSize) {
+                                          _handlePageSizeChange(newValue);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  // Navigation buttons
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.arrow_back,
+                                          size: 20,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.all(8),
+                                        constraints: const BoxConstraints(),
+                                        onPressed:
+                                            state.hasPreviousPage
+                                                ? () => _productBloc.add(
+                                                  LoadPaginatedProducts(
+                                                    page: state.currentPage - 1,
+                                                    pageSize: _pageSize,
+                                                  ),
+                                                )
+                                                : null,
+                                        tooltip: 'Previous Page',
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.arrow_forward,
+                                          size: 20,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.all(8),
+                                        constraints: const BoxConstraints(),
+                                        onPressed:
+                                            state.hasNextPage
+                                                ? () => _productBloc.add(
+                                                  LoadPaginatedProducts(
+                                                    page: state.currentPage + 1,
+                                                    pageSize: _pageSize,
+                                                  ),
+                                                )
+                                                : null,
+                                        tooltip: 'Next Page',
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              items:
-                                  const [20, 50, 75, 100].map((int size) {
-                                    return DropdownMenuItem<int>(
-                                      value: size,
-                                      child: Text('$size per page'),
-                                    );
-                                  }).toList(),
-                              onChanged: (int? newValue) {
-                                if (newValue != null && newValue != _pageSize) {
-                                  _handlePageSizeChange(newValue);
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 16),
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back),
-                              onPressed:
-                                  state.hasPreviousPage
-                                      ? () => _productBloc.add(
-                                        LoadPaginatedProducts(
-                                          page: state.currentPage - 1,
-                                          pageSize: _pageSize,
-                                        ),
-                                      )
-                                      : null,
-                              tooltip: 'Previous Page',
-                            ),
-                            const SizedBox(width: 16),
-                            IconButton(
-                              icon: const Icon(Icons.arrow_forward),
-                              onPressed:
-                                  state.hasNextPage
-                                      ? () => _productBloc.add(
-                                        LoadPaginatedProducts(
-                                          page: state.currentPage + 1,
-                                          pageSize: _pageSize,
-                                        ),
-                                      )
-                                      : null,
-                              tooltip: 'Next Page',
+                            ],
+                          );
+                        }
+
+                        // Use original layout for larger screens
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Page ${state.currentPage} of $totalPages'),
+                            Row(
+                              children: [
+                                // Page size dropdown added here
+                                DropdownButton<int>(
+                                  value: _pageSize,
+                                  underline: Container(),
+                                  icon: const Icon(
+                                    Icons.arrow_drop_down,
+                                    color: Colors.grey,
+                                  ),
+                                  items:
+                                      const [20, 50, 75, 100].map((int size) {
+                                        return DropdownMenuItem<int>(
+                                          value: size,
+                                          child: Text('$size per page'),
+                                        );
+                                      }).toList(),
+                                  onChanged: (int? newValue) {
+                                    if (newValue != null &&
+                                        newValue != _pageSize) {
+                                      _handlePageSizeChange(newValue);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 16),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_back),
+                                  onPressed:
+                                      state.hasPreviousPage
+                                          ? () => _productBloc.add(
+                                            LoadPaginatedProducts(
+                                              page: state.currentPage - 1,
+                                              pageSize: _pageSize,
+                                            ),
+                                          )
+                                          : null,
+                                  tooltip: 'Previous Page',
+                                ),
+                                const SizedBox(width: 16),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_forward),
+                                  onPressed:
+                                      state.hasNextPage
+                                          ? () => _productBloc.add(
+                                            LoadPaginatedProducts(
+                                              page: state.currentPage + 1,
+                                              pageSize: _pageSize,
+                                            ),
+                                          )
+                                          : null,
+                                  tooltip: 'Next Page',
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ],
