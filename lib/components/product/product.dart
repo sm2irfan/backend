@@ -1,0 +1,387 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:equatable/equatable.dart';
+
+// Export UI components for easy access
+export 'product_ui.dart';
+
+// Product Model - Updated to use direct category fields instead of a map
+class Product extends Equatable {
+  final int id;
+  final DateTime createdAt;
+  final String name;
+  final String uPrices;
+  final String? image;
+  final int? discount;
+  final String? description;
+  final String? category1;  // Direct field instead of map
+  final String? category2;  // Direct field instead of map
+  final bool popularProduct;
+  final String? matchingWords;
+
+  const Product({
+    required this.id,
+    required this.createdAt,
+    required this.name,
+    required this.uPrices,
+    this.image,
+    this.discount,
+    this.description,
+    this.category1,  // Changed to optional direct fields
+    this.category2,  // Changed to optional direct fields
+    required this.popularProduct,
+    this.matchingWords,
+  });
+
+  // Get all non-null categories as a list
+  List<String> get categoryList => [
+    if (category1 != null) category1!,
+    if (category2 != null) category2!,
+  ];
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    try {
+      // Handle null created_at field by using a fixed fallback date
+      DateTime createdAt;
+      if (json['created_at'] == null) {
+        createdAt = DateTime(2023, 1, 1);
+      } else {
+        createdAt = DateTime.parse(json['created_at'] as String);
+      }
+
+      return Product(
+        id: json['id'] as int,
+        createdAt: createdAt,
+        name: json['name'] as String? ?? 'Unnamed Product',
+        uPrices:
+            json['uprices'] is String
+                ? json['uprices'] as String
+                : json['uprices'].toString(),
+        image: json['image'] as String?,
+        discount: json['discount'] as int?,
+        description: json['description'] as String?,
+        category1: json['category_1'] as String?,  // Direct access to category fields
+        category2: json['category_2'] as String?,  // Direct access to category fields
+        popularProduct: json['popular_product'] as bool? ?? false,
+        matchingWords: json['matching_words'] as String?,
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  @override
+  List<Object?> get props => [
+    id,
+    createdAt,
+    name,
+    uPrices,
+    image,
+    discount,
+    description,
+    category1,  // Updated props list
+    category2,  // Updated props list
+    popularProduct,
+    matchingWords,
+  ];
+}
+
+// Repository with pagination support
+class ProductRepository {
+  final SupabaseClient _supabaseClient = Supabase.instance.client;
+
+  Future<Map<String, dynamic>> getPaginatedProducts(
+    int page,
+    int pageSize,
+  ) async {
+    try {
+      // Get total count for pagination
+      final countResponse =
+          await _supabaseClient.from('all_products').select('id').count();
+
+      // Extract count from the response properly
+      final totalItems = (countResponse.count as int?) ?? 0;
+
+      // Calculate offset based on page number and page size
+      final offset = (page - 1) * pageSize;
+
+      // Fetch paginated data
+      final response = await _supabaseClient
+          .from('all_products')
+          .select()
+          .order('id', ascending: false) // Changed from created_at to id
+          .range(offset, offset + pageSize - 1);
+
+      // Parse products
+      List<Product> products = [];
+      for (int i = 0; i < response.length; i++) {
+        try {
+          final json = response[i];
+          final product = Product.fromJson(json);
+          products.add(product);
+        } catch (parseError) {
+          // Skip this item but continue processing others
+        }
+      }
+
+      // Calculate pagination info
+      final totalPages = (totalItems / pageSize).ceil();
+      final hasNextPage = page < totalPages;
+      final hasPreviousPage = page > 1;
+
+      return {
+        'products': products,
+        'totalItems': totalItems,
+        'currentPage': page,
+        'totalPages': totalPages,
+        'hasNextPage': hasNextPage,
+        'hasPreviousPage': hasPreviousPage,
+      };
+    } catch (e) {
+      throw Exception('Failed to load products: $e');
+    }
+  }
+
+  Future<List<Product>> getPopularProducts() async {
+    try {
+      final response = await _supabaseClient
+          .from('all_products')
+          .select()
+          .eq('popular_product', true)
+          .order('id', ascending: false); // Changed from created_at to id
+
+      List<Product> products = [];
+      for (int i = 0; i < response.length; i++) {
+        try {
+          final product = Product.fromJson(response[i]);
+          products.add(product);
+        } catch (parseError) {
+          debugPrint('Error parsing popular product at index $i: $parseError');
+        }
+      }
+      return products;
+    } catch (e) {
+      debugPrint('Error fetching popular products: $e');
+      throw Exception('Failed to load popular products: $e');
+    }
+  }
+
+  Future<List<Product>> getProductsByCategory(String category) async {
+    try {
+      final response = await _supabaseClient
+          .from('all_products')
+          .select()
+          .or('category_1.eq.$category,category_2.eq.$category')
+          .order('id', ascending: false); // Changed from created_at to id
+
+      List<Product> products = [];
+      for (int i = 0; i < response.length; i++) {
+        try {
+          final product = Product.fromJson(response[i]);
+          products.add(product);
+        } catch (parseError) {
+          debugPrint(
+            'Error parsing product by category at index $i: $parseError',
+          );
+        }
+      }
+      return products;
+    } catch (e) {
+      debugPrint('Error fetching products by category: $e');
+      throw Exception('Failed to load products by category: $e');
+    }
+  }
+}
+
+// Updated BLoC Events
+abstract class ProductEvent extends Equatable {
+  const ProductEvent();
+
+  @override
+  List<Object> get props => [];
+}
+
+class LoadProducts extends ProductEvent {
+  const LoadProducts();
+}
+
+class LoadPaginatedProducts extends ProductEvent {
+  final int page;
+  final int pageSize;
+
+  const LoadPaginatedProducts({required this.page, required this.pageSize});
+
+  @override
+  List<Object> get props => [page, pageSize];
+}
+
+class LoadPopularProducts extends ProductEvent {}
+
+class LoadProductsByCategory extends ProductEvent {
+  final String category;
+
+  const LoadProductsByCategory(this.category);
+
+  @override
+  List<Object> get props => [category];
+}
+
+// Updated BLoC States
+abstract class ProductState extends Equatable {
+  const ProductState();
+
+  @override
+  List<Object> get props => [];
+}
+
+class ProductInitial extends ProductState {}
+
+class ProductLoading extends ProductState {
+  final bool isFirstLoad;
+
+  const ProductLoading({this.isFirstLoad = true});
+
+  @override
+  List<Object> get props => [isFirstLoad];
+}
+
+class ProductsLoaded extends ProductState {
+  final List<Product> products;
+  final int totalItems;
+  final int currentPage;
+  final bool hasNextPage;
+  final bool hasPreviousPage;
+
+  const ProductsLoaded({
+    required this.products,
+    required this.totalItems,
+    required this.currentPage,
+    required this.hasNextPage,
+    required this.hasPreviousPage,
+  });
+
+  @override
+  List<Object> get props => [
+    products,
+    totalItems,
+    currentPage,
+    hasNextPage,
+    hasPreviousPage,
+  ];
+}
+
+class ProductError extends ProductState {
+  final String message;
+
+  const ProductError(this.message);
+
+  @override
+  List<Object> get props => [message];
+}
+
+// Updated BLoC
+class ProductBloc extends Bloc<ProductEvent, ProductState> {
+  final ProductRepository _productRepository;
+
+  ProductBloc(this._productRepository) : super(ProductInitial()) {
+    on<LoadProducts>(_onLoadProducts);
+    on<LoadPaginatedProducts>(_onLoadPaginatedProducts);
+    on<LoadPopularProducts>(_onLoadPopularProducts);
+    on<LoadProductsByCategory>(_onLoadProductsByCategory);
+  }
+
+  Future<void> _onLoadProducts(
+    LoadProducts event,
+    Emitter<ProductState> emit,
+  ) async {
+    emit(const ProductLoading());
+    try {
+      // For backward compatibility, use page 1 with a large size
+      final result = await _productRepository.getPaginatedProducts(1, 1000);
+      emit(
+        ProductsLoaded(
+          products: result['products'],
+          totalItems: result['totalItems'],
+          currentPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        ),
+      );
+    } catch (e) {
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadPaginatedProducts(
+    LoadPaginatedProducts event,
+    Emitter<ProductState> emit,
+  ) async {
+    // For page changes, we want to show a loading indicator but not a full-screen one
+    final isFirstLoad = state is ProductInitial || state is ProductError;
+    emit(ProductLoading(isFirstLoad: isFirstLoad));
+
+    try {
+      final result = await _productRepository.getPaginatedProducts(
+        event.page,
+        event.pageSize,
+      );
+
+      emit(
+        ProductsLoaded(
+          products: result['products'],
+          totalItems: result['totalItems'],
+          currentPage: event.page,
+          hasNextPage: result['hasNextPage'],
+          hasPreviousPage: result['hasPreviousPage'],
+        ),
+      );
+    } catch (e) {
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadPopularProducts(
+    LoadPopularProducts event,
+    Emitter<ProductState> emit,
+  ) async {
+    emit(const ProductLoading());
+    try {
+      final products = await _productRepository.getPopularProducts();
+      emit(
+        ProductsLoaded(
+          products: products,
+          totalItems: products.length,
+          currentPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        ),
+      );
+    } catch (e) {
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadProductsByCategory(
+    LoadProductsByCategory event,
+    Emitter<ProductState> emit,
+  ) async {
+    emit(const ProductLoading());
+    try {
+      final products = await _productRepository.getProductsByCategory(
+        event.category,
+      );
+      emit(
+        ProductsLoaded(
+          products: products,
+          totalItems: products.length,
+          currentPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        ),
+      );
+    } catch (e) {
+      emit(ProductError(e.toString()));
+    }
+  }
+}
