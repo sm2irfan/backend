@@ -5,7 +5,7 @@ import 'components/product/product.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+  await dotenv.load(fileName: "assets/.env");
 
   // Initialize Supabase
   await Supabase.initialize(
