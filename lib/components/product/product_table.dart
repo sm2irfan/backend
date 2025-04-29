@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'product.dart';
 
 // Paginated product table with navigation controls
@@ -73,19 +74,6 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Products',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text('Total: ${widget.totalItems} items'),
-              ],
-            ),
-          ),
           const Divider(height: 1),
           Expanded(
             child:
@@ -107,39 +95,58 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                                 color: Colors.grey[200],
                               ),
                               children: List.generate(titles.length, (i) {
-                                return MouseRegion(
-                                  cursor: SystemMouseCursors.resizeColumn,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.translucent,
-                                    onHorizontalDragUpdate: (d) {
-                                      setState(() {
-                                        _columnWidths[i] = (_columnWidths[i] +
-                                                d.delta.dx)
-                                            .clamp(50.0, 300.0);
-                                      });
-                                    },
-                                    onVerticalDragUpdate: (d) {
-                                      setState(() {
-                                        _rowHeight = (_rowHeight + d.delta.dy)
-                                            .clamp(40.0, 200.0);
-                                      });
-                                    },
-                                    child: SizedBox(
+                                return Stack(
+                                  children: [
+                                    // Selectable text area (main content)
+                                    Container(
                                       height: _rowHeight,
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8.0,
-                                          vertical: 12.0,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8.0,
+                                        vertical: 12.0,
+                                      ),
+                                      alignment: Alignment.centerLeft,
+                                      child: SelectableText(
+                                        titles[i],
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        child: Text(
-                                          titles[i],
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    // Resize handle (positioned at right edge)
+                                    Positioned(
+                                      right: 0,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: MouseRegion(
+                                        cursor: SystemMouseCursors.resizeColumn,
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.translucent,
+                                          onHorizontalDragUpdate: (d) {
+                                            setState(() {
+                                              _columnWidths[i] =
+                                                  (_columnWidths[i] +
+                                                          d.delta.dx)
+                                                      .clamp(
+                                                        30.0,
+                                                        double.infinity,
+                                                      );
+                                            });
+                                          },
+                                          onVerticalDragUpdate: (d) {
+                                            setState(() {
+                                              _rowHeight = (_rowHeight +
+                                                      d.delta.dy)
+                                                  .clamp(40.0, 200.0);
+                                            });
+                                          },
+                                          child: Container(
+                                            width: 10,
+                                            color: Colors.transparent,
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 );
                               }),
                             ),
@@ -147,246 +154,182 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                         ),
                         // scrollable data rows (vertical only)
                         Expanded(
-                          child: Table(
-                            border: TableBorder.all(color: Colors.grey),
-                            columnWidths: _columnWidths.asMap().map(
-                              (i, w) => MapEntry(i, FixedColumnWidth(w)),
-                            ),
-                            defaultVerticalAlignment:
-                                TableCellVerticalAlignment.middle,
-                            children: [
-                              for (final product in widget.products)
-                                TableRow(
-                                  children: List.generate(_columnWidths.length, (
-                                    i,
-                                  ) {
-                                    // map column index to the existing cell widget
-                                    Widget cell;
-                                    switch (i) {
-                                      case 0:
-                                        cell = Text('#${product.id}');
-                                        break;
-                                      case 1:
-                                        cell = Text(
-                                          '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
-                                        );
-                                        break;
-                                      case 2:
-                                        cell = ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 220,
-                                          ),
-                                          child: Row(
+                          child: SingleChildScrollView(
+                            controller: _verticalScrollController,
+                            scrollDirection: Axis.vertical,
+                            child: Table(
+                              border: TableBorder.all(color: Colors.grey),
+                              columnWidths: _columnWidths.asMap().map(
+                                (i, w) => MapEntry(i, FixedColumnWidth(w)),
+                              ),
+                              defaultVerticalAlignment:
+                                  TableCellVerticalAlignment.middle,
+                              children: [
+                                for (final product in widget.products)
+                                  TableRow(
+                                    children: List.generate(_columnWidths.length, (
+                                      i,
+                                    ) {
+                                      // map column index to the existing cell widget
+                                      Widget cell;
+                                      switch (i) {
+                                        case 0:
+                                          cell = SelectableText(
+                                            '#${product.id}',
+                                          );
+                                          break;
+                                        case 1:
+                                          cell = SelectableText(
+                                            '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
+                                          );
+                                          break;
+                                        case 2:
+                                          cell = ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 220,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _buildProductThumbnail(product),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: SelectableText(
+                                                    product.name,
+                                                    maxLines: 2,
+                                                    textAlign: TextAlign.left,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          break;
+                                        case 3:
+                                          cell = SelectableText(
+                                            '\$${product.uPrices}',
+                                          );
+                                          break;
+                                        case 4:
+                                          cell = ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 200,
+                                            ),
+                                            child: SelectableText(
+                                              product.description ?? '',
+                                              maxLines: 2,
+                                              textAlign: TextAlign.left,
+                                            ),
+                                          );
+                                          break;
+                                        case 5:
+                                          cell = SelectableText(
+                                            product.discount != null
+                                                ? '${product.discount}%'
+                                                : '-',
+                                          );
+                                          break;
+                                        case 6:
+                                          cell = ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 120,
+                                            ),
+                                            child: SelectableText(
+                                              product.category1 ?? '',
+                                              maxLines: 1,
+                                              textAlign: TextAlign.left,
+                                            ),
+                                          );
+                                          break;
+                                        case 7:
+                                          cell = ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 120,
+                                            ),
+                                            child: SelectableText(
+                                              product.category2 ?? '',
+                                              maxLines: 1,
+                                              textAlign: TextAlign.left,
+                                            ),
+                                          );
+                                          break;
+                                        case 8:
+                                          cell =
+                                              product.popularProduct
+                                                  ? const Icon(
+                                                    Icons.star,
+                                                    color: Colors.amber,
+                                                    size: 20,
+                                                  )
+                                                  : const SelectableText('-');
+                                          break;
+                                        case 9:
+                                          cell = ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 150,
+                                            ),
+                                            child: SelectableText(
+                                              product.matchingWords ?? '',
+                                              maxLines: 1,
+                                              textAlign: TextAlign.left,
+                                            ),
+                                          );
+                                          break;
+                                        default:
+                                          cell = Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              _buildProductThumbnail(product),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  product.name,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  maxLines: 2,
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.edit,
+                                                  size: 20,
                                                 ),
+                                                onPressed: () {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        'Edit: ${product.name}',
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.delete,
+                                                  size: 20,
+                                                  color: Colors.red,
+                                                ),
+                                                onPressed: () {
+                                                  _showDeleteConfirmation(
+                                                    context,
+                                                    product,
+                                                  );
+                                                },
                                               ),
                                             ],
+                                          );
+                                      }
+
+                                      return SizedBox(
+                                        height: _rowHeight,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8.0,
+                                            vertical: 12.0,
                                           ),
-                                        );
-                                        break;
-                                      case 3:
-                                        cell = Text('\$${product.uPrices}');
-                                        break;
-                                      case 4:
-                                        cell = ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 200,
-                                          ),
-                                          child: Text(
-                                            product.description ?? '',
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 2,
-                                          ),
-                                        );
-                                        break;
-                                      case 5:
-                                        cell = Text(
-                                          product.discount != null
-                                              ? '${product.discount}%'
-                                              : '-',
-                                        );
-                                        break;
-                                      case 6:
-                                        cell = ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 120,
-                                          ),
-                                          child: Text(
-                                            product.category1 ?? '',
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                          ),
-                                        );
-                                        break;
-                                      case 7:
-                                        cell = ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 120,
-                                          ),
-                                          child: Text(
-                                            product.category2 ?? '',
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                          ),
-                                        );
-                                        break;
-                                      case 8:
-                                        cell =
-                                            product.popularProduct
-                                                ? const Icon(
-                                                  Icons.star,
-                                                  color: Colors.amber,
-                                                  size: 20,
-                                                )
-                                                : const Text('-');
-                                        break;
-                                      case 9:
-                                        cell = ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 150,
-                                          ),
-                                          child: Text(
-                                            product.matchingWords ?? '',
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                          ),
-                                        );
-                                        break;
-                                      default:
-                                        cell = Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.edit,
-                                                size: 20,
-                                              ),
-                                              constraints: const BoxConstraints(
-                                                maxWidth: 40,
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                              onPressed: () {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      'Edit: ${product.name}',
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.delete,
-                                                size: 20,
-                                                color: Colors.red,
-                                              ),
-                                              constraints: const BoxConstraints(
-                                                maxWidth: 40,
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                              onPressed: () {
-                                                _showDeleteConfirmation(
-                                                  context,
-                                                  product,
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        );
-                                    }
-                                    return SizedBox(
-                                      height: _rowHeight,
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8.0,
-                                          vertical: 12.0,
+                                          child: cell,
                                         ),
-                                        child: cell,
-                                      ),
-                                    );
-                                  }),
-                                ),
-                            ],
+                                      );
+                                    }),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-          ),
-          // Pagination controls with page size selector
-          Container(
-            padding: const EdgeInsets.symmetric(
-              vertical: 8.0,
-              horizontal: 16.0,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              border: const Border(
-                top: BorderSide(color: Colors.grey, width: 0.5),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Page ${widget.currentPage} of $totalPages'),
-                Row(
-                  children: [
-                    // Page size dropdown added here
-                    DropdownButton<int>(
-                      value: widget.pageSize,
-                      underline: Container(),
-                      icon: const Icon(
-                        Icons.arrow_drop_down,
-                        color: Colors.grey,
-                      ),
-                      items:
-                          const [20, 50, 75, 100].map((int size) {
-                            return DropdownMenuItem<int>(
-                              value: size,
-                              child: Text('$size per page'),
-                            );
-                          }).toList(),
-                      onChanged: (int? newValue) {
-                        if (newValue != null && newValue != widget.pageSize) {
-                          widget.onPageSizeChanged(newValue);
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed:
-                          widget.hasPreviousPage
-                              ? () =>
-                                  widget.onPageChanged(widget.currentPage - 1)
-                              : null,
-                      tooltip: 'Previous Page',
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: const Icon(Icons.arrow_forward),
-                      onPressed:
-                          widget.hasNextPage
-                              ? () =>
-                                  widget.onPageChanged(widget.currentPage + 1)
-                              : null,
-                      tooltip: 'Next Page',
-                    ),
-                  ],
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -402,8 +345,6 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               ? Image.network(
                 product.image!,
                 fit: BoxFit.cover,
-                width: 40,
-                height: 40,
                 errorBuilder: (context, error, stackTrace) {
                   return const Icon(Icons.image_not_supported, size: 20);
                 },

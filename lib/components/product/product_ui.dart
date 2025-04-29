@@ -42,6 +42,8 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
   // Default page size with min 20, max 100
   int _pageSize = 50;
   late ProductBloc _productBloc;
+  // Add scroll controller for horizontal scrolling
+  final ScrollController _horizontalScrollController = ScrollController();
 
   @override
   void initState() {
@@ -55,6 +57,7 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
   void dispose() {
     // Properly close the bloc when the widget is disposed
     _productBloc.close();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -71,20 +74,142 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
       value: _productBloc, // Use the bloc instance created in initState
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Product Management'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              tooltip: 'Add New Product',
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Add new product feature coming soon'),
-                  ),
-                );
+          elevation: 2,
+          title: Row(
+            children: [
+              Icon(Icons.inventory_2, color: Theme.of(context).primaryColor),
+              const SizedBox(width: 12),
+              const Text(
+                'Product Management',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(56),
+            child: BlocBuilder<ProductBloc, ProductState>(
+              builder: (context, state) {
+                if (state is ProductsLoaded) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey.shade300,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0,
+                      vertical: 12.0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Products',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                '${state.totalItems} items',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Search box - could be expanded in the future
+                        Container(
+                          width: 240,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.search,
+                                color: Colors.grey.shade600,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    hintText: 'Search products...',
+                                    hintStyle: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
               },
             ),
-            const SizedBox(width: 16),
+          ),
+          actions: [
+            // Add product button with black styling
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                label: const Text(
+                  'Add Product',
+                  style: TextStyle(color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black87,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Add new product feature coming soon'),
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
         body: BlocBuilder<ProductBloc, ProductState>(
@@ -92,20 +217,123 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
             if (state is ProductLoading && state.isFirstLoad) {
               return const Center(child: CircularProgressIndicator());
             } else if (state is ProductsLoaded) {
-              return PaginatedProductTable(
-                products: state.products,
-                currentPage: state.currentPage,
-                totalItems: state.totalItems,
-                pageSize: _pageSize,
-                hasNextPage: state.hasNextPage,
-                hasPreviousPage: state.hasPreviousPage,
-                isLoading: state is! ProductsLoaded && state is ProductLoading,
-                onPageChanged: (page) {
-                  _productBloc.add(
-                    LoadPaginatedProducts(page: page, pageSize: _pageSize),
-                  );
-                },
-                onPageSizeChanged: _handlePageSizeChange,
+              // Calculate total pages for pagination controls
+              final int totalPages = (state.totalItems / _pageSize).ceil();
+
+              return Column(
+                children: [
+                  // Table with horizontal scrollbar
+                  Expanded(
+                    child: Scrollbar(
+                      controller: _horizontalScrollController,
+                      scrollbarOrientation: ScrollbarOrientation.bottom,
+                      thumbVisibility: false,
+                      interactive: true,
+                      child: SingleChildScrollView(
+                        controller: _horizontalScrollController,
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: MediaQuery.of(context).size.width,
+                          ),
+                          child: PaginatedProductTable(
+                            products: state.products,
+                            currentPage: state.currentPage,
+                            totalItems: state.totalItems,
+                            pageSize: _pageSize,
+                            hasNextPage: state.hasNextPage,
+                            hasPreviousPage: state.hasPreviousPage,
+                            isLoading:
+                                state is! ProductsLoaded &&
+                                state is ProductLoading,
+                            onPageChanged: (page) {
+                              _productBloc.add(
+                                LoadPaginatedProducts(
+                                  page: page,
+                                  pageSize: _pageSize,
+                                ),
+                              );
+                            },
+                            onPageSizeChanged: _handlePageSizeChange,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Pagination controls moved to footer
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8.0,
+                      horizontal: 16.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      border: const Border(
+                        top: BorderSide(color: Colors.grey, width: 0.5),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Page ${state.currentPage} of $totalPages'),
+                        Row(
+                          children: [
+                            // Page size dropdown added here
+                            DropdownButton<int>(
+                              value: _pageSize,
+                              underline: Container(),
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                color: Colors.grey,
+                              ),
+                              items:
+                                  const [20, 50, 75, 100].map((int size) {
+                                    return DropdownMenuItem<int>(
+                                      value: size,
+                                      child: Text('$size per page'),
+                                    );
+                                  }).toList(),
+                              onChanged: (int? newValue) {
+                                if (newValue != null && newValue != _pageSize) {
+                                  _handlePageSizeChange(newValue);
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 16),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              onPressed:
+                                  state.hasPreviousPage
+                                      ? () => _productBloc.add(
+                                        LoadPaginatedProducts(
+                                          page: state.currentPage - 1,
+                                          pageSize: _pageSize,
+                                        ),
+                                      )
+                                      : null,
+                              tooltip: 'Previous Page',
+                            ),
+                            const SizedBox(width: 16),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_forward),
+                              onPressed:
+                                  state.hasNextPage
+                                      ? () => _productBloc.add(
+                                        LoadPaginatedProducts(
+                                          page: state.currentPage + 1,
+                                          pageSize: _pageSize,
+                                        ),
+                                      )
+                                      : null,
+                              tooltip: 'Next Page',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               );
             } else if (state is ProductError) {
               return Center(
