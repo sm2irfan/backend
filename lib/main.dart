@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'components/product/product.dart';
 import 'components/auth/login_page.dart';
+import 'data/local_database.dart';
 
 void main() async {
+  // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize SQLite for desktop platforms
+  LocalDatabase.initializeFfi();
 
   // Initialize Supabase
   await Supabase.initialize(
