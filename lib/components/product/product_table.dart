@@ -6,6 +6,8 @@ import 'dart:io' show Platform;
 import 'product.dart';
 import 'editable_product_manager.dart';
 import '../../data/local_database.dart';
+import 'product_table_mobile.dart';
+import 'product_table_desktop.dart';
 
 // Paginated product table with navigation controls
 class PaginatedProductTable extends StatefulWidget {
@@ -37,31 +39,53 @@ class PaginatedProductTable extends StatefulWidget {
 }
 
 class _PaginatedProductTableState extends State<PaginatedProductTable> {
-  // controller for vertical scrolling
+  // Controller for vertical scrolling
   final ScrollController _verticalScrollController = ScrollController();
-  // state for resizable columns & rows
+
+  // State for resizable columns & rows
   late List<double> _columnWidths;
-  double _rowHeight = 100.0; // Increased initial row height
+  double _rowHeight = 100.0; // Default row height for large screens
+  bool _isMobileView = false;
 
   // Manager for editable product functionality
   final EditableProductManager _editManager = EditableProductManager();
 
-  // Add this property to track sync status
+  // Track sync status
   bool _isSyncing = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize columns with custom widths - now for 12 columns (added image column)
-    _columnWidths = List.filled(12, 120.0);
-    // Set custom widths for columns
-    _columnWidths[0] = 80.0; // ID column can be narrower
-    _columnWidths[1] = 120.0; // Created At column
-    _columnWidths[2] = 70.0; // Image column - just for thumbnail
-    _columnWidths[3] = 250.0; // Product name column
-    _columnWidths[4] = 300.0; // Description column gets more space
-    _columnWidths[5] = 350.0; // Description column gets more space
-    _columnWidths[6] = 80.0; // Description column gets more space
+    // Initialize with default values
+    _initializeColumnWidths();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Get screen width and determine if mobile view
+    double screenWidth = MediaQuery.of(context).size.width;
+    bool isMobile = screenWidth < 800;
+
+    if (isMobile != _isMobileView) {
+      setState(() {
+        _isMobileView = isMobile;
+        _initializeColumnWidths();
+        // Adjust row height for mobile or desktop
+        _rowHeight =
+            _isMobileView
+                ? ProductTableMobile.getRowHeight()
+                : ProductTableDesktop.getRowHeight();
+      });
+    }
+  }
+
+  void _initializeColumnWidths() {
+    // Choose appropriate column widths based on device type
+    _columnWidths =
+        _isMobileView
+            ? ProductTableMobile.initializeColumnWidths()
+            : ProductTableDesktop.initializeColumnWidths();
   }
 
   void _startEditing(Product product) {
@@ -238,166 +262,138 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       'Actions',
     ];
 
-    // Define smaller text style for the entire table
-    const tableHeaderStyle = TextStyle(
-      fontSize: 13.0,
-      fontWeight: FontWeight.bold,
-    );
-
     return Container(
       color: Colors.grey[300],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Add sync button here
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ElevatedButton.icon(
-              onPressed: _isSyncing ? null : _syncProducts,
-              icon:
-                  _isSyncing
-                      ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.0),
-                      )
-                      : const Icon(Icons.sync),
-              label: Text(
-                _isSyncing ? 'Syncing...' : 'Sync All Products table',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-              ),
-            ),
-          ),
+          // Sync button at the top
+          _buildSyncButton(),
+
           const Divider(height: 1),
+
+          // Main content area
           Expanded(
             child:
                 widget.products.isEmpty
                     ? const Center(child: Text('No products found'))
-                    : Column(
-                      children: [
-                        // header row (fixed, no horizontal scroll)
-                        Table(
-                          border: TableBorder.all(color: Colors.grey),
-                          columnWidths: _columnWidths.asMap().map(
-                            (i, w) => MapEntry(i, FixedColumnWidth(w)),
-                          ),
-                          defaultVerticalAlignment:
-                              TableCellVerticalAlignment.middle,
-                          children: [
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                              ),
-                              children: List.generate(titles.length, (i) {
-                                return Stack(
-                                  children: [
-                                    // Selectable text area (main content)
-                                    Container(
-                                      height: _rowHeight,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8.0,
-                                        vertical: 12.0,
-                                      ),
-                                      alignment: Alignment.centerLeft,
-                                      child: SelectableText(
-                                        titles[i],
-                                        style: tableHeaderStyle,
-                                      ),
-                                    ),
-                                    // Resize handle (positioned at right edge)
-                                    Positioned(
-                                      right: 0,
-                                      top: 0,
-                                      bottom: 0,
-                                      child: MouseRegion(
-                                        cursor: SystemMouseCursors.resizeColumn,
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.translucent,
-                                          onHorizontalDragUpdate: (d) {
-                                            setState(() {
-                                              _columnWidths[i] =
-                                                  (_columnWidths[i] +
-                                                          d.delta.dx)
-                                                      .clamp(
-                                                        30.0,
-                                                        double.infinity,
-                                                      );
-                                            });
-                                          },
-                                          onVerticalDragUpdate: (d) {
-                                            setState(() {
-                                              _rowHeight = (_rowHeight +
-                                                      d.delta.dy)
-                                                  .clamp(40.0, 200.0);
-                                            });
-                                          },
-                                          child: Container(
-                                            width: 10,
-                                            color: Colors.transparent,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }),
-                            ),
-                          ],
-                        ),
-                        // scrollable data rows (vertical only)
-                        Expanded(
-                          child: SingleChildScrollView(
-                            controller: _verticalScrollController,
-                            scrollDirection: Axis.vertical,
-                            child: Table(
-                              border: TableBorder.all(color: Colors.grey),
-                              columnWidths: _columnWidths.asMap().map(
-                                (i, w) => MapEntry(i, FixedColumnWidth(w)),
-                              ),
-                              defaultVerticalAlignment:
-                                  TableCellVerticalAlignment.middle,
-                              children: [
-                                for (final product in widget.products)
-                                  TableRow(
-                                    decoration: BoxDecoration(
-                                      color:
-                                          _editManager.editingProduct?.id ==
-                                                  product.id
-                                              ? Colors.white
-                                              : null,
-                                    ),
-                                    children: List.generate(
-                                      _columnWidths.length,
-                                      (i) {
-                                        return SizedBox(
-                                          height: _rowHeight,
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8.0,
-                                              vertical: 12.0,
-                                            ),
-                                            child: _buildCell(product, i),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                    : _isMobileView
+                    ? ProductTableMobile.buildTable(
+                      titles: titles,
+                      columnWidths: _columnWidths,
+                      rowHeight: _rowHeight,
+                      verticalScrollController: _verticalScrollController,
+                      buildColumnHeader: _buildColumnHeader,
+                      buildTableRows: _buildTableRows,
+                    )
+                    : ProductTableDesktop.buildTable(
+                      titles: titles,
+                      columnWidths: _columnWidths,
+                      rowHeight: _rowHeight,
+                      verticalScrollController: _verticalScrollController,
+                      buildColumnHeader: _buildColumnHeader,
+                      buildTableRows: _buildTableRows,
                     ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSyncButton() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: ElevatedButton.icon(
+        onPressed: _isSyncing ? null : _syncProducts,
+        icon:
+            _isSyncing
+                ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.0),
+                )
+                : const Icon(Icons.sync),
+        label: Text(_isSyncing ? 'Syncing...' : 'Sync All Products table'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        ),
+      ),
+    );
+  }
+
+  // Shared header column builder with resize capability
+  Widget _buildColumnHeader(String title, int index, TextStyle style) {
+    return Stack(
+      children: [
+        // Selectable text area (main content)
+        Container(
+          height: _rowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+          alignment: Alignment.centerLeft,
+          child: SelectableText(title, style: style),
+        ),
+
+        // Resize handle (positioned at right edge)
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeColumn,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (d) {
+                setState(() {
+                  _columnWidths[index] = (_columnWidths[index] + d.delta.dx)
+                      .clamp(30.0, double.infinity);
+                });
+              },
+              onVerticalDragUpdate: (d) {
+                setState(() {
+                  _rowHeight = (_rowHeight + d.delta.dy).clamp(40.0, 200.0);
+                });
+              },
+              child: Container(width: 10, color: Colors.transparent),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Shared table rows builder
+  Widget _buildTableRows(bool isMobile) {
+    return Table(
+      border: TableBorder.all(color: Colors.grey),
+      columnWidths: _columnWidths.asMap().map(
+        (i, w) => MapEntry(i, FixedColumnWidth(w)),
+      ),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        for (final product in widget.products)
+          TableRow(
+            decoration: BoxDecoration(
+              color:
+                  _editManager.editingProduct?.id == product.id
+                      ? Colors.white
+                      : null,
+            ),
+            children: List.generate(_columnWidths.length, (i) {
+              return SizedBox(
+                height: _rowHeight,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8.0,
+                    vertical: 12.0,
+                  ),
+                  child: _buildCell(product, i, isMobile),
+                ),
+              );
+            }),
+          ),
+      ],
     );
   }
 
@@ -418,8 +414,6 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       );
     }
 
-    final String logPrefix = isEnlarged ? 'Enlarged image' : 'Thumbnail';
-
     return SizedBox(
       key: imageKey,
       width: width,
@@ -429,7 +423,6 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         imageUrl: imageUrl,
         fit: fit,
         progressIndicatorBuilder: (context, url, progress) {
-          // Log the loading source
           if (progress.totalSize == null) {
             return isEnlarged
                 ? const SizedBox()
@@ -523,33 +516,46 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     );
   }
 
-  Widget _buildCell(Product product, int columnIndex) {
+  // Cell builder with appropriate mobile/desktop styling
+  Widget _buildCell(Product product, int columnIndex, bool isMobile) {
     final bool isEditing = _editManager.editingProduct?.id == product.id;
+    // Get appropriate text style based on device type
+    final TextStyle textStyle =
+        isMobile
+            ? ProductTableMobile.getTextStyle()
+            : ProductTableDesktop.getTextStyle();
 
     switch (columnIndex) {
       case 0:
-        return SelectableText(
-          '#${product.id}',
-          style: const TextStyle(fontSize: 13.0),
-        );
+        return SelectableText('#${product.id}', style: textStyle);
       case 1:
         return SelectableText(
           '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
-          style: const TextStyle(fontSize: 13.0),
+          style: textStyle,
         );
       case 2: // Image column
         return _buildProductThumbnail(product);
-      case 3: // Product name column (no image)
+      case 3: // Product name column
         if (isEditing) {
           return _editManager.buildEditableNameCell();
         } else {
+          // Get constraints based on device type
+          double maxWidth =
+              isMobile
+                  ? ProductTableMobile.getMaxWidthForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxWidthForColumn(columnIndex);
+          int maxLines =
+              isMobile
+                  ? ProductTableMobile.getMaxLinesForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxLinesForColumn(columnIndex);
+
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 250),
+            constraints: BoxConstraints(maxWidth: maxWidth),
             child: SelectableText(
               product.name,
-              maxLines: 3,
+              maxLines: maxLines,
               textAlign: TextAlign.left,
-              style: const TextStyle(fontSize: 13.0),
+              style: textStyle,
             ),
           );
         }
@@ -557,22 +563,28 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         if (isEditing) {
           return _editManager.buildEditablePriceCell();
         } else {
-          return SelectableText(
-            '\$${product.uPrices}',
-            style: const TextStyle(fontSize: 13.0),
-          );
+          return SelectableText('\$${product.uPrices}', style: textStyle);
         }
       case 5: // Description column
         if (isEditing) {
           return _editManager.buildEditableDescriptionCell();
         } else {
+          double maxWidth =
+              isMobile
+                  ? ProductTableMobile.getMaxWidthForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxWidthForColumn(columnIndex);
+          int maxLines =
+              isMobile
+                  ? ProductTableMobile.getMaxLinesForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxLinesForColumn(columnIndex);
+
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 300),
+            constraints: BoxConstraints(maxWidth: maxWidth),
             child: SelectableText(
               product.description ?? '',
-              maxLines: 3,
+              maxLines: maxLines,
               textAlign: TextAlign.left,
-              style: const TextStyle(fontSize: 13.0),
+              style: textStyle,
             ),
           );
         }
@@ -582,20 +594,25 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         } else {
           return SelectableText(
             product.discount != null ? '${product.discount}%' : '-',
-            style: const TextStyle(fontSize: 13.0),
+            style: textStyle,
           );
         }
       case 7: // Category 1
         if (isEditing) {
           return _editManager.buildEditableCategory1Cell();
         } else {
+          double maxWidth =
+              isMobile
+                  ? ProductTableMobile.getMaxWidthForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxWidthForColumn(columnIndex);
+
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 120),
+            constraints: BoxConstraints(maxWidth: maxWidth),
             child: SelectableText(
               product.category1 ?? '',
               maxLines: 1,
               textAlign: TextAlign.left,
-              style: const TextStyle(fontSize: 13.0),
+              style: textStyle,
             ),
           );
         }
@@ -603,13 +620,18 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         if (isEditing) {
           return _editManager.buildEditableCategory2Cell();
         } else {
+          double maxWidth =
+              isMobile
+                  ? ProductTableMobile.getMaxWidthForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxWidthForColumn(columnIndex);
+
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 120),
+            constraints: BoxConstraints(maxWidth: maxWidth),
             child: SelectableText(
               product.category2 ?? '',
               maxLines: 1,
               textAlign: TextAlign.left,
-              style: const TextStyle(fontSize: 13.0),
+              style: textStyle,
             ),
           );
         }
@@ -629,13 +651,18 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         if (isEditing) {
           return _editManager.buildEditableMatchingWordsCell();
         } else {
+          double maxWidth =
+              isMobile
+                  ? ProductTableMobile.getMaxWidthForColumn(columnIndex)
+                  : ProductTableDesktop.getMaxWidthForColumn(columnIndex);
+
           return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 150),
+            constraints: BoxConstraints(maxWidth: maxWidth),
             child: SelectableText(
               product.matchingWords ?? '',
               maxLines: 1,
               textAlign: TextAlign.left,
-              style: const TextStyle(fontSize: 13.0),
+              style: textStyle,
             ),
           );
         }
@@ -646,21 +673,19 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             _cancelEditing,
           );
         } else {
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.edit, size: 20),
-                onPressed: () => _startEditing(product),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-                onPressed: () {
-                  _showDeleteConfirmation(context, product);
-                },
-              ),
-            ],
-          );
+          return isMobile
+              ? ProductTableMobile.buildActionButtons(
+                context: context,
+                product: product,
+                onEdit: _startEditing,
+                onDelete: _showDeleteConfirmation,
+              )
+              : ProductTableDesktop.buildActionButtons(
+                context: context,
+                product: product,
+                onEdit: _startEditing,
+                onDelete: _showDeleteConfirmation,
+              );
         }
     }
   }
