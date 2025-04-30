@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:developer' as developer;
 import 'product.dart';
 import 'editable_product_manager.dart';
 
@@ -247,13 +249,74 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     );
   }
 
+  // Reusable cached image widget
+  Widget _buildCachedImage({
+    required String? imageUrl,
+    required BoxFit fit,
+    required double width,
+    required double height,
+    bool isEnlarged = false,
+    Key? imageKey,
+  }) {
+    if (imageUrl == null) {
+      return SizedBox(
+        width: width,
+        height: height,
+        child: Icon(Icons.image_not_supported, size: isEnlarged ? 50 : 20),
+      );
+    }
+
+    final String logPrefix = isEnlarged ? 'Enlarged image' : 'Thumbnail';
+
+    return SizedBox(
+      key: imageKey,
+      width: width,
+      height: height,
+      child: CachedNetworkImage(
+        key: ValueKey('${isEnlarged ? 'enlarged' : 'thumbnail'}-$imageUrl'),
+        imageUrl: imageUrl,
+        fit: fit,
+        progressIndicatorBuilder: (context, url, progress) {
+          // Log the loading source
+          if (progress.totalSize == null) {
+            developer.log('$logPrefix: Loading from cache: $url');
+            return isEnlarged
+                ? const SizedBox()
+                : const SizedBox(width: 20, height: 20);
+          } else {
+            final percent = progress.downloaded / (progress.totalSize ?? 1);
+            developer.log(
+              '$logPrefix: Loading from network ($url): ${(percent * 100).toStringAsFixed(0)}%',
+            );
+
+            return Center(
+              child: SizedBox(
+                width: isEnlarged ? 40 : 20,
+                height: isEnlarged ? 40 : 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: isEnlarged ? 3 : 2,
+                  value: percent,
+                ),
+              ),
+            );
+          }
+        },
+        errorWidget: (context, url, error) {
+          developer.log('$logPrefix: Error loading $url: $error');
+          return Icon(Icons.error_outline, size: isEnlarged ? 50 : 20);
+        },
+      ),
+    );
+  }
+
   Widget _buildProductThumbnail(Product product) {
     final GlobalKey imageKey = GlobalKey();
     OverlayEntry? overlayEntry;
+    final String? imageUrl = product.image;
 
     // Create an overlay with larger image
     void showEnlargedImage() {
-      if (product.image == null) return;
+      if (imageUrl == null) return;
 
       overlayEntry = OverlayEntry(
         builder: (context) {
@@ -278,12 +341,12 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                 ),
                 width: 500,
                 height: 500,
-                child: Image.network(
-                  product.image!,
+                child: _buildCachedImage(
+                  imageUrl: imageUrl,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.error_outline, size: 50);
-                  },
+                  width: 500,
+                  height: 500,
+                  isEnlarged: true,
                 ),
               ),
             ),
@@ -303,20 +366,12 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     return MouseRegion(
       onEnter: (_) => showEnlargedImage(),
       onExit: (_) => hideEnlargedImage(),
-      child: SizedBox(
-        key: imageKey,
+      child: _buildCachedImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
         width: 40,
         height: 40,
-        child:
-            product.image != null
-                ? Image.network(
-                  product.image!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.image_not_supported, size: 20);
-                  },
-                )
-                : const Icon(Icons.image_not_supported, size: 20),
+        imageKey: imageKey,
       ),
     );
   }
