@@ -248,19 +248,76 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   Widget _buildProductThumbnail(Product product) {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child:
-          product.image != null
-              ? Image.network(
-                product.image!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(Icons.image_not_supported, size: 20);
-                },
-              )
-              : const Icon(Icons.image_not_supported, size: 20),
+    final GlobalKey imageKey = GlobalKey();
+    OverlayEntry? overlayEntry;
+
+    // Create an overlay with larger image
+    void showEnlargedImage() {
+      if (product.image == null) return;
+
+      overlayEntry = OverlayEntry(
+        builder: (context) {
+          // Get position of the thumbnail to position enlarged image
+          final RenderBox? renderBox =
+              imageKey.currentContext?.findRenderObject() as RenderBox?;
+          if (renderBox == null) return const SizedBox();
+
+          final position = renderBox.localToGlobal(Offset.zero);
+          final size = renderBox.size;
+
+          return Positioned(
+            left: position.dx + size.width + 5,
+            top: position.dy - 100, // Position a bit higher than thumbnail
+            child: Material(
+              elevation: 8,
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  color: Colors.white,
+                ),
+                width: 500,
+                height: 500,
+                child: Image.network(
+                  product.image!,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(Icons.error_outline, size: 50);
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
+      Overlay.of(context).insert(overlayEntry!);
+    }
+
+    // Remove the overlay
+    void hideEnlargedImage() {
+      overlayEntry?.remove();
+      overlayEntry = null;
+    }
+
+    return MouseRegion(
+      onEnter: (_) => showEnlargedImage(),
+      onExit: (_) => hideEnlargedImage(),
+      child: SizedBox(
+        key: imageKey,
+        width: 40,
+        height: 40,
+        child:
+            product.image != null
+                ? Image.network(
+                  product.image!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(Icons.image_not_supported, size: 20);
+                  },
+                )
+                : const Icon(Icons.image_not_supported, size: 20),
+      ),
     );
   }
 
