@@ -1,6 +1,7 @@
 CREATE TABLE all_products (
     id SERIAL PRIMARY KEY, -- Assuming 'id' is a unique identifier
     created_at TIMESTAMP NOT NULL, -- Stores the creation time
+    updated_at TIMESTAMP,
     name VARCHAR(255) NOT NULL, -- Product name with a max length of 255
     uprices Text(10, 2) NOT NULL, -- Prices with up to 10 digits and 2 decimal places
     image TEXT, -- URL or path for the product image

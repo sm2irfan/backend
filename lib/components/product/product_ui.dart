@@ -436,7 +436,7 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                 ),
               );
             }
-            return const Center(child: Text('No products available'));
+            return const Center(child: CircularProgressIndicator());
           },
         ),
       ),

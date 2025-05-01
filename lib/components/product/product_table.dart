@@ -1,8 +1,93 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'sync_products_button.dart';
+
+// New Refresh Button Widget
+class RefreshButton extends StatefulWidget {
+  final int currentPage;
+  final int pageSize;
+
+  const RefreshButton({
+    Key? key,
+    required this.currentPage,
+    required this.pageSize,
+  }) : super(key: key);
+
+  @override
+  State<RefreshButton> createState() => _RefreshButtonState();
+}
+
+class _RefreshButtonState extends State<RefreshButton> {
+  bool _isRefreshing = false;
+
+  void _refreshData() {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    // Dispatch the refresh event to the bloc
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    productBloc.add(
+      RefreshCurrentPage(
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+      ),
+    );
+
+    // Reset the refreshing state after a short delay
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<ProductBloc, ProductState>(
+      listener: (context, state) {
+        // Stop refreshing when data is loaded or there's an error
+        if (state is ProductsLoaded || state is ProductError) {
+          if (mounted && _isRefreshing) {
+            setState(() {
+              _isRefreshing = false;
+            });
+          }
+        }
+      },
+      child: Tooltip(
+        message: 'Refresh current page data',
+        child: ElevatedButton.icon(
+          onPressed: _isRefreshing ? null : _refreshData,
+          icon:
+              _isRefreshing
+                  ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                  : const Icon(Icons.refresh),
+          label: const Text('Refresh'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blueAccent,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 // MARK: - Table Configuration
 
@@ -431,12 +516,25 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SyncProductsButton(),
+          // Add a row containing both buttons with space between them
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SyncProductsButton(),
+                RefreshButton(
+                  currentPage: widget.currentPage,
+                  pageSize: widget.pageSize,
+                ),
+              ],
+            ),
+          ),
           const Divider(height: 1),
           Expanded(
             child:
                 widget.products.isEmpty
-                    ? const Center(child: Text('No products found'))
+                    ? const Center(child: CircularProgressIndicator())
                     : _tableConfig.buildTable(
                       titles: _titles,
                       columnWidths: _columnWidths,

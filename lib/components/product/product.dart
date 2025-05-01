@@ -196,6 +196,17 @@ class LoadProductsByCategory extends ProductEvent {
   List<Object> get props => [category];
 }
 
+// New event for refreshing current page
+class RefreshCurrentPage extends ProductEvent {
+  final int currentPage;
+  final int pageSize;
+
+  const RefreshCurrentPage({required this.currentPage, required this.pageSize});
+
+  @override
+  List<Object> get props => [currentPage, pageSize];
+}
+
 // Updated BLoC States
 abstract class ProductState extends Equatable {
   const ProductState();
@@ -258,6 +269,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     on<LoadPaginatedProducts>(_onLoadPaginatedProducts);
     on<LoadPopularProducts>(_onLoadPopularProducts);
     on<LoadProductsByCategory>(_onLoadProductsByCategory);
+    on<RefreshCurrentPage>(_onRefreshCurrentPage); // Register new handler
   }
 
   Future<void> _onLoadProducts(
@@ -347,6 +359,38 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
           currentPage: 1,
           hasNextPage: false,
           hasPreviousPage: false,
+        ),
+      );
+    } catch (e) {
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  // Handler for the new refresh event
+  Future<void> _onRefreshCurrentPage(
+    RefreshCurrentPage event,
+    Emitter<ProductState> emit,
+  ) async {
+    // Preserve the current page
+    final currentState = state;
+    bool isFirstLoad = false;
+
+    // We're refreshing, not doing a first load, so set isFirstLoad to false
+    emit(ProductLoading(isFirstLoad: isFirstLoad));
+
+    try {
+      final result = await _productRepository.getPaginatedProducts(
+        event.currentPage,
+        event.pageSize,
+      );
+
+      emit(
+        ProductsLoaded(
+          products: result['products'],
+          totalItems: result['totalItems'],
+          currentPage: event.currentPage,
+          hasNextPage: result['hasNextPage'],
+          hasPreviousPage: result['hasPreviousPage'],
         ),
       );
     } catch (e) {
