@@ -11,6 +11,7 @@ export 'product_ui.dart';
 class Product extends Equatable {
   final int id;
   final DateTime createdAt;
+  final DateTime? updatedAt; // Added updatedAt field
   final String name;
   final String uPrices;
   final String? image;
@@ -24,6 +25,7 @@ class Product extends Equatable {
   const Product({
     required this.id,
     required this.createdAt,
+    this.updatedAt, // Added to constructor
     required this.name,
     required this.uPrices,
     this.image,
@@ -51,9 +53,21 @@ class Product extends Equatable {
         createdAt = DateTime.parse(json['created_at'] as String);
       }
 
+      // Handle the updated_at field
+      DateTime? updatedAt;
+      if (json['updated_at'] != null) {
+        try {
+          updatedAt = DateTime.parse(json['updated_at'] as String);
+        } catch (e) {
+          // If parsing fails, leave as null
+          updatedAt = null;
+        }
+      }
+
       return Product(
         id: json['id'] as int,
         createdAt: createdAt,
+        updatedAt: updatedAt, // Add updatedAt to the constructor
         name: json['name'] as String? ?? 'Unnamed Product',
         uPrices:
             json['uprices'] is String
@@ -78,6 +92,7 @@ class Product extends Equatable {
   List<Object?> get props => [
     id,
     createdAt,
+    updatedAt, // Add updatedAt to props
     name,
     uPrices,
     image,

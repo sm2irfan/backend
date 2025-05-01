@@ -76,10 +76,19 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
   void _initializeColumnWidths() {
     // Choose appropriate column widths based on device type
-    _columnWidths =
+    var initialWidths =
         _isMobileView
             ? ProductTableMobile.initializeColumnWidths()
             : ProductTableDesktop.initializeColumnWidths();
+
+    // Create a new list from the initial widths (converting from fixed-length to growable)
+    _columnWidths = List<double>.from(initialWidths);
+
+    // Ensure we have enough columns for all titles (including Updated At and Actions)
+    while (_columnWidths.length < 13) {
+      // Add default width for any missing columns
+      _columnWidths.add(100.0);
+    }
   }
 
   void _startEditing(Product product) {
@@ -119,6 +128,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     final titles = [
       'ID',
       'Created At',
+      'Updated At', // Added Updated At column
       'Image',
       'Product',
       'Price',
@@ -372,16 +382,23 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             : ProductTableDesktop.getTextStyle();
 
     switch (columnIndex) {
-      case 0:
+      case 0: // ID
         return SelectableText('#${product.id}', style: textStyle);
-      case 1:
+      case 1: // Created At
         return SelectableText(
           '${product.createdAt.day}/${product.createdAt.month}/${product.createdAt.year}',
           style: textStyle,
         );
-      case 2: // Image column
+      case 2: // Updated At
+        return SelectableText(
+          product.updatedAt != null
+              ? '${product.updatedAt!.day}/${product.updatedAt!.month}/${product.updatedAt!.year}'
+              : '-',
+          style: textStyle,
+        );
+      case 3: // Image
         return _buildProductThumbnail(product);
-      case 3: // Product name column
+      case 4: // Product name
         if (isEditing) {
           return _editManager.buildEditableNameCell();
         } else {
@@ -405,13 +422,13 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ),
           );
         }
-      case 4: // Price column
+      case 5: // Price
         if (isEditing) {
           return _editManager.buildEditablePriceCell();
         } else {
           return SelectableText(product.uPrices, style: textStyle);
         }
-      case 5: // Description column
+      case 6: // Description
         if (isEditing) {
           return _editManager.buildEditableDescriptionCell();
         } else {
@@ -434,7 +451,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ),
           );
         }
-      case 6: // Discount
+      case 7: // Discount
         if (isEditing) {
           return _editManager.buildEditableDiscountCell();
         } else {
@@ -443,7 +460,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             style: textStyle,
           );
         }
-      case 7: // Category 1
+      case 8: // Category 1
         if (isEditing) {
           return _editManager.buildEditableCategory1Cell();
         } else {
@@ -462,7 +479,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ),
           );
         }
-      case 8: // Category 2
+      case 9: // Category 2
         if (isEditing) {
           return _editManager.buildEditableCategory2Cell();
         } else {
@@ -481,7 +498,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ),
           );
         }
-      case 9: // Popular
+      case 10: // Popular
         if (isEditing) {
           return _editManager.buildEditablePopularCell((value) {
             setState(() {
@@ -493,7 +510,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               ? const Icon(Icons.star, color: Colors.amber, size: 20)
               : const SelectableText('-');
         }
-      case 10: // Matching Words
+      case 11: // Matching Words
         if (isEditing) {
           return _editManager.buildEditableMatchingWordsCell();
         } else {
@@ -512,7 +529,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ),
           );
         }
-      default: // Actions column
+      case 12: // Actions - make sure this is case 12 now
         if (isEditing) {
           return _editManager.buildEditableActionCell(
             _saveChanges,
@@ -533,6 +550,8 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                 onDelete: _showDeleteConfirmation,
               );
         }
+      default:
+        return const SizedBox(); // Empty widget for any unexpected columns
     }
   }
 

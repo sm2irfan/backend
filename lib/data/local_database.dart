@@ -133,7 +133,12 @@ Then restart the application.
 
       developer.log('Initializing SQLite database at $dbPath');
 
-      return await openDatabase(dbPath, version: 1, onCreate: _createDatabase);
+      return await openDatabase(
+        dbPath,
+        version: 2, // Increment version from 1 to 2
+        onCreate: _createDatabase,
+        onUpgrade: _upgradeDatabase, // Add this onUpgrade handler
+      );
     } catch (e) {
       developer.log('Error initializing database: $e');
       rethrow;
@@ -146,6 +151,7 @@ Then restart the application.
       CREATE TABLE IF NOT EXISTS all_products(
         id INTEGER PRIMARY KEY,
         created_at TEXT,
+        updated_at TEXT,
         name TEXT NOT NULL,
         uprices TEXT NOT NULL,
         image TEXT,
@@ -157,6 +163,26 @@ Then restart the application.
         matching_words TEXT
       )
     ''');
+  }
+
+  // Add migration function for database upgrades
+  Future<void> _upgradeDatabase(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    developer.log('Upgrading database from v$oldVersion to v$newVersion');
+
+    if (oldVersion < 2) {
+      // Check if the column exists before adding it to avoid errors
+      var columns = await db.rawQuery('PRAGMA table_info(all_products)');
+      var columnNames = columns.map((c) => c['name'] as String).toList();
+
+      if (!columnNames.contains('updated_at')) {
+        developer.log('Adding updated_at column to all_products table');
+        await db.execute('ALTER TABLE all_products ADD COLUMN updated_at TEXT');
+      }
+    }
   }
 
   // Check if all_products table exists
@@ -226,6 +252,8 @@ Then restart the application.
               'id': item['id'],
               'created_at':
                   item['created_at'] ?? DateTime.now().toIso8601String(),
+              'updated_at':
+                  item['updated_at'] ?? DateTime.now().toIso8601String(),
               'name': item['name'] ?? 'Unnamed Product',
               'uprices': item['uprices']?.toString() ?? '0',
               'image': item['image'],
@@ -307,12 +335,24 @@ Then restart the application.
           // Convert SQLite bool (stored as int) back to bool for Product class
           final bool popularProduct = (json['popular_product'] as int?) == 1;
 
+          // Parse the updated_at field
+          DateTime? updatedAt;
+          if (json['updated_at'] != null) {
+            try {
+              updatedAt = DateTime.parse(json['updated_at'] as String);
+            } catch (e) {
+              developer.log('Error parsing updated_at: $e');
+              updatedAt = null;
+            }
+          }
+
           final product = Product(
             id: json['id'] as int,
             createdAt:
                 json['created_at'] != null
                     ? DateTime.parse(json['created_at'] as String)
                     : DateTime(2023, 1, 1),
+            updatedAt: updatedAt, // Add the updatedAt field
             name: json['name'] as String? ?? 'Unnamed Product',
             uPrices: json['uprices'] as String? ?? '0',
             image: json['image'] as String?,
