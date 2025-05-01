@@ -39,7 +39,7 @@ class AppDrawer extends StatelessWidget {
                 Text(
                   'Welcome, Admin User',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(),
                     fontSize: 14,
                   ),
                 ),
@@ -132,8 +132,7 @@ class AppDrawer extends StatelessWidget {
           fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
         ),
       ),
-      tileColor:
-          isActive ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
+      tileColor: isActive ? Theme.of(context).primaryColor.withValues() : null,
       onTap: onTap,
     );
   }

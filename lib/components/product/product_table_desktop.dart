@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'product.dart';
-import 'editable_product_manager.dart';
 
 /// Desktop-specific implementation of product table
 class ProductTableDesktop {

@@ -45,7 +45,7 @@ class EditableProductManager {
   Widget buildEditableNameCell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 250),
-      child: Container(
+      child: SizedBox(
         height: 80,
         child: TextFormField(
           controller: nameController,
@@ -67,14 +67,13 @@ class EditableProductManager {
   Widget buildEditablePriceCell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 120),
-      child: Container(
+      child: SizedBox(
         height: 80,
         child: TextFormField(
           controller: priceController,
           style: const TextStyle(fontSize: 13.0),
           decoration: const InputDecoration(
             isDense: true,
-            prefix: Text('\$'),
             contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
             border: InputBorder.none,
             alignLabelWithHint: true,
@@ -90,7 +89,7 @@ class EditableProductManager {
   Widget buildEditableDescriptionCell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 200),
-      child: Container(
+      child: SizedBox(
         height: 80, // Increased height for multiple lines
         child: TextFormField(
           controller: descriptionController,
@@ -112,7 +111,7 @@ class EditableProductManager {
   Widget buildEditableDiscountCell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 120),
-      child: Container(
+      child: SizedBox(
         height: 80,
         child: TextFormField(
           controller: discountController,
@@ -135,7 +134,7 @@ class EditableProductManager {
   Widget buildEditableCategory1Cell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 120),
-      child: Container(
+      child: SizedBox(
         height: 80,
         child: TextFormField(
           controller: category1Controller,
@@ -157,7 +156,7 @@ class EditableProductManager {
   Widget buildEditableCategory2Cell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 120),
-      child: Container(
+      child: SizedBox(
         height: 80,
         child: TextFormField(
           controller: category2Controller,
@@ -179,7 +178,7 @@ class EditableProductManager {
   Widget buildEditableMatchingWordsCell() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 150),
-      child: Container(
+      child: SizedBox(
         height: 80,
         child: TextFormField(
           controller: matchingWordsController,

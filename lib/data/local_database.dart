@@ -1,12 +1,11 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../components/product/product.dart';
 import 'dart:developer' as developer;
 // Add these imports for desktop support
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'dart:io' show Platform, Process;
+import 'dart:io' show Platform;
 
 // Create a custom exception for SQLite availability issues
 class SqliteNotAvailableException implements Exception {
@@ -110,10 +109,7 @@ Then restart the application.
     bool initialized = await initializeFfi();
     if (!initialized) {
       throw SqliteNotAvailableException(
-        'SQLite library is not available. ' +
-            (Platform.isLinux
-                ? 'Please install it with: sudo apt-get install -y libsqlite3-dev'
-                : 'Please ensure SQLite is properly installed.'),
+        'SQLite library is not available. ${Platform.isLinux ? 'Please install it with: sudo apt-get install -y libsqlite3-dev' : 'Please ensure SQLite is properly installed.'}',
       );
     }
 
@@ -192,11 +188,8 @@ Then restart the application.
     return {
       'success': false,
       'message':
-          'SQLite library not available on this system. ' +
-          (Platform.isLinux
-              ? 'Please install SQLite development libraries with:\n' +
-                  '  sudo apt-get update && sudo apt-get install -y libsqlite3-dev'
-              : 'Please ensure SQLite is properly installed.'),
+          'SQLite library not available on this system. ${Platform.isLinux ? 'Please install SQLite development libraries with:\n'
+                  '  sudo apt-get update && sudo apt-get install -y libsqlite3-dev' : 'Please ensure SQLite is properly installed.'}',
       'count': 0,
       'sqlite_missing': true,
     };

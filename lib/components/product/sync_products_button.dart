@@ -12,7 +12,6 @@ class SyncProductsButton extends StatefulWidget {
 class _SyncProductsButtonState extends State<SyncProductsButton> {
   bool _isSyncing = false;
 
-  // Method to handle sync operation
   Future<void> _syncProducts() async {
     if (_isSyncing) return;
 
@@ -22,23 +21,23 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
 
     try {
       final LocalDatabase db = LocalDatabase();
-
-      // Check if SQLite is available
       bool sqliteAvailable = await LocalDatabase.isSqliteAvailable();
 
       if (!sqliteAvailable) {
-        // Show a more comprehensive error message with installation instructions
-        _showSqliteInstructionsDialog();
-        setState(() {
-          _isSyncing = false;
-        });
+        if (mounted) {
+          _showSqliteInstructionsDialog();
+          setState(() {
+            _isSyncing = false;
+          });
+        }
         return;
       }
 
       final result = await db.syncProductsFromSupabase();
 
+      if (!mounted) return;
+
       if (result['sqlite_missing'] == true) {
-        // Handle the case where SQLite was detected as missing during the operation
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message']),
@@ -47,13 +46,12 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
             action: SnackBarAction(
               label: 'MORE INFO',
               onPressed: () {
-                _showSqliteInstructionsDialog();
+                if (mounted) _showSqliteInstructionsDialog();
               },
             ),
           ),
         );
       } else {
-        // Normal success/failure handling
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message']),
@@ -62,20 +60,25 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error syncing products: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error syncing products: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isSyncing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
     }
   }
 
   void _showSqliteInstructionsDialog() {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder:

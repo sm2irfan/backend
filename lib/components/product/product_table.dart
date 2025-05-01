@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'dart:developer' as developer;
-import 'dart:io' show Platform;
 import 'product.dart';
 import 'editable_product_manager.dart';
-import '../../data/local_database.dart';
 import 'product_table_mobile.dart';
 import 'product_table_desktop.dart';
 import 'sync_products_button.dart';
@@ -413,7 +409,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         if (isEditing) {
           return _editManager.buildEditablePriceCell();
         } else {
-          return SelectableText('\$${product.uPrices}', style: textStyle);
+          return SelectableText(product.uPrices, style: textStyle);
         }
       case 5: // Description column
         if (isEditing) {
@@ -562,8 +558,8 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ],
           ),
     ).then((confirmed) {
-      if (confirmed == true) {
-        // Show SnackBar after dialog is dismissed, using the original context
+      if (confirmed == true && mounted) {
+        // Added mounted check before using context after async gap
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Deleted: ${product.name}')));
