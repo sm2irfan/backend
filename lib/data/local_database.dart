@@ -45,24 +45,28 @@ class LocalDatabase {
     try {
       // Only use FFI for desktop platforms
       if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        // Try to initialize FFI
+        // Initialize FFI
         sqfliteFfiInit();
+
+        // Important: Set the database factory IMMEDIATELY after initialization
+        // This fixes the "databaseFactory not initialized" error
+        databaseFactory = databaseFactoryFfi;
+        developer.log('Set database factory to FFI implementation');
 
         // On Linux, check if SQLite is installed
         if (Platform.isLinux) {
           try {
-            // First try loading the database directly - this will fail if library is missing
-            try {
-              final databaseFactoryTemp = databaseFactoryFfi;
-              final dbTest = await databaseFactoryTemp.openDatabase(':memory:');
-              await dbTest.close();
-              developer.log('SQLite library test successful');
-            } catch (e) {
-              developer.log('SQLite library test failed: $e');
-              _sqliteAvailable = false;
+            // Test if we can open a database
+            final dbTest = await databaseFactory.openDatabase(':memory:');
+            await dbTest.close();
+            developer.log('SQLite library test successful');
+            _sqliteAvailable = true;
+          } catch (e) {
+            developer.log('SQLite library test failed: $e');
+            _sqliteAvailable = false;
 
-              // Provide detailed installation instructions for different Linux distributions
-              developer.log('''
+            // Provide detailed installation instructions for different Linux distributions
+            developer.log('''
 SQLite library not found. Please install it using one of the following commands:
 
 For Ubuntu/Debian:
@@ -77,23 +81,14 @@ For Arch Linux:
 Then restart the application.
 ''');
 
-              return false;
-            }
-          } catch (e) {
-            developer.log('Error during SQLite availability check: $e');
-            _sqliteAvailable = false;
             return false;
           }
         }
 
-        // Change the default factory for desktop platforms - only if test was successful
-        if (_sqliteAvailable) {
-          databaseFactory = databaseFactoryFfi;
-          developer.log(
-            'Successfully initialized SQLite FFI for desktop platform',
-          );
-          return true;
-        }
+        developer.log(
+          'Successfully initialized SQLite FFI for desktop platform',
+        );
+        return true;
       } else if (Platform.isAndroid || Platform.isIOS) {
         // On mobile, SQLite is natively supported
         _sqliteAvailable = true;
@@ -109,27 +104,9 @@ Then restart the application.
     return _sqliteAvailable;
   }
 
-  // Simulate database operations when SQLite is not available
-  Future<Map<String, dynamic>> simulateSyncOperation() async {
-    // Fake operation for when SQLite is not available
-    await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
-
-    return {
-      'success': false,
-      'message':
-          'SQLite library not available on this system. ' +
-          (Platform.isLinux
-              ? 'Please install SQLite development libraries with:\n' +
-                  '  sudo apt-get update && sudo apt-get install -y libsqlite3-dev'
-              : 'Please ensure SQLite is properly installed.'),
-      'count': 0,
-      'sqlite_missing': true,
-    };
-  }
-
   // Get a database instance with fallback for when SQLite is unavailable
   Future<Database> get database async {
-    // First check if SQLite is available
+    // First check if SQLite is available and initialize it
     bool initialized = await initializeFfi();
     if (!initialized) {
       throw SqliteNotAvailableException(
@@ -205,6 +182,24 @@ Then restart the application.
     if (_initializationAttempted) return _sqliteAvailable;
 
     return await initializeFfi();
+  }
+
+  // Simulate database operations when SQLite is not available
+  Future<Map<String, dynamic>> simulateSyncOperation() async {
+    // Fake operation for when SQLite is not available
+    await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
+
+    return {
+      'success': false,
+      'message':
+          'SQLite library not available on this system. ' +
+          (Platform.isLinux
+              ? 'Please install SQLite development libraries with:\n' +
+                  '  sudo apt-get update && sudo apt-get install -y libsqlite3-dev'
+              : 'Please ensure SQLite is properly installed.'),
+      'count': 0,
+      'sqlite_missing': true,
+    };
   }
 
   // Safe version of syncProductsFromSupabase that checks SQLite availability first

@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:equatable/equatable.dart';
 
+import '../../data/local_database.dart';
+
 // Export UI components for easy access
 export 'product_ui.dart';
 
@@ -15,8 +17,8 @@ class Product extends Equatable {
   final String? image;
   final int? discount;
   final String? description;
-  final String? category1;  // Direct field instead of map
-  final String? category2;  // Direct field instead of map
+  final String? category1; // Direct field instead of map
+  final String? category2; // Direct field instead of map
   final bool popularProduct;
   final String? matchingWords;
 
@@ -28,8 +30,8 @@ class Product extends Equatable {
     this.image,
     this.discount,
     this.description,
-    this.category1,  // Changed to optional direct fields
-    this.category2,  // Changed to optional direct fields
+    this.category1, // Changed to optional direct fields
+    this.category2, // Changed to optional direct fields
     required this.popularProduct,
     this.matchingWords,
   });
@@ -61,8 +63,10 @@ class Product extends Equatable {
         image: json['image'] as String?,
         discount: json['discount'] as int?,
         description: json['description'] as String?,
-        category1: json['category_1'] as String?,  // Direct access to category fields
-        category2: json['category_2'] as String?,  // Direct access to category fields
+        category1:
+            json['category_1'] as String?, // Direct access to category fields
+        category2:
+            json['category_2'] as String?, // Direct access to category fields
         popularProduct: json['popular_product'] as bool? ?? false,
         matchingWords: json['matching_words'] as String?,
       );
@@ -80,8 +84,8 @@ class Product extends Equatable {
     image,
     discount,
     description,
-    category1,  // Updated props list
-    category2,  // Updated props list
+    category1, // Updated props list
+    category2, // Updated props list
     popularProduct,
     matchingWords,
   ];
@@ -89,55 +93,16 @@ class Product extends Equatable {
 
 // Repository with pagination support
 class ProductRepository {
-  final SupabaseClient _supabaseClient = Supabase.instance.client;
+  // final SupabaseClient _supabaseClient = Supabase.instance.client;
+  final LocalDatabase _localDatabase = LocalDatabase();
 
   Future<Map<String, dynamic>> getPaginatedProducts(
     int page,
     int pageSize,
   ) async {
     try {
-      // Get total count for pagination
-      final countResponse =
-          await _supabaseClient.from('all_products').select('id').count();
-
-      // Extract count from the response properly
-      final totalItems = (countResponse.count as int?) ?? 0;
-
-      // Calculate offset based on page number and page size
-      final offset = (page - 1) * pageSize;
-
-      // Fetch paginated data
-      final response = await _supabaseClient
-          .from('all_products')
-          .select()
-          .order('id', ascending: false) // Changed from created_at to id
-          .range(offset, offset + pageSize - 1);
-
-      // Parse products
-      List<Product> products = [];
-      for (int i = 0; i < response.length; i++) {
-        try {
-          final json = response[i];
-          final product = Product.fromJson(json);
-          products.add(product);
-        } catch (parseError) {
-          // Skip this item but continue processing others
-        }
-      }
-
-      // Calculate pagination info
-      final totalPages = (totalItems / pageSize).ceil();
-      final hasNextPage = page < totalPages;
-      final hasPreviousPage = page > 1;
-
-      return {
-        'products': products,
-        'totalItems': totalItems,
-        'currentPage': page,
-        'totalPages': totalPages,
-        'hasNextPage': hasNextPage,
-        'hasPreviousPage': hasPreviousPage,
-      };
+      // Get data from local database instead of Supabase
+      return await _localDatabase.getLocalPaginatedProducts(page, pageSize);
     } catch (e) {
       throw Exception('Failed to load products: $e');
     }
@@ -145,21 +110,15 @@ class ProductRepository {
 
   Future<List<Product>> getPopularProducts() async {
     try {
-      final response = await _supabaseClient
-          .from('all_products')
-          .select()
-          .eq('popular_product', true)
-          .order('id', ascending: false); // Changed from created_at to id
+      // Get all products from local database (with page size 1000 to get all)
+      final response = await _localDatabase.getLocalPaginatedProducts(1, 1000);
 
-      List<Product> products = [];
-      for (int i = 0; i < response.length; i++) {
-        try {
-          final product = Product.fromJson(response[i]);
-          products.add(product);
-        } catch (parseError) {
-          debugPrint('Error parsing popular product at index $i: $parseError');
-        }
-      }
+      // Filter for popular products only
+      final products =
+          (response['products'] as List<Product>)
+              .where((product) => product.popularProduct)
+              .toList();
+
       return products;
     } catch (e) {
       debugPrint('Error fetching popular products: $e');
@@ -169,23 +128,19 @@ class ProductRepository {
 
   Future<List<Product>> getProductsByCategory(String category) async {
     try {
-      final response = await _supabaseClient
-          .from('all_products')
-          .select()
-          .or('category_1.eq.$category,category_2.eq.$category')
-          .order('id', ascending: false); // Changed from created_at to id
+      // Get all products from local database (with page size 1000 to get all)
+      final response = await _localDatabase.getLocalPaginatedProducts(1, 1000);
 
-      List<Product> products = [];
-      for (int i = 0; i < response.length; i++) {
-        try {
-          final product = Product.fromJson(response[i]);
-          products.add(product);
-        } catch (parseError) {
-          debugPrint(
-            'Error parsing product by category at index $i: $parseError',
-          );
-        }
-      }
+      // Filter for products matching the category
+      final products =
+          (response['products'] as List<Product>)
+              .where(
+                (product) =>
+                    product.category1 == category ||
+                    product.category2 == category,
+              )
+              .toList();
+
       return products;
     } catch (e) {
       debugPrint('Error fetching products by category: $e');
