@@ -68,19 +68,55 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
       if (!mounted) return;
 
       final productBloc = BlocProvider.of<ProductBloc>(context);
-      productBloc.add(
-        FilterProductsByColumn(
-          column: widget.columnName.toLowerCase(),
-          value: value.trim(),
-          page: 1, // Reset to first page when applying filter
-          pageSize: widget.pageSize,
-        ),
-      );
+
+      // Special handling for ID column to support comma-separated values
+      if (widget.columnName.toLowerCase() == 'id') {
+        // Process comma-separated values
+        final String trimmedValue = value.trim();
+
+        // Only apply filter if not empty
+        if (trimmedValue.isNotEmpty) {
+          productBloc.add(
+            FilterProductsByColumn(
+              column: widget.columnName.toLowerCase(),
+              value:
+                  trimmedValue, // BLoC will handle comma-separated processing
+              page: 1, // Reset to first page when applying filter
+              pageSize: widget.pageSize,
+            ),
+          );
+        } else {
+          // If value is empty, use the existing FilterProductsByColumn event with empty value
+          // This effectively clears the filter
+          productBloc.add(
+            FilterProductsByColumn(
+              column: widget.columnName.toLowerCase(),
+              value: "", // Empty value to clear the filter
+              page: 1,
+              pageSize: widget.pageSize,
+            ),
+          );
+        }
+      } else {
+        // Standard filtering for other columns
+        productBloc.add(
+          FilterProductsByColumn(
+            column: widget.columnName.toLowerCase(),
+            value: value.trim(),
+            page: 1, // Reset to first page when applying filter
+            pageSize: widget.pageSize,
+          ),
+        );
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Show different hint text based on column type
+    final String hintText =
+        widget.columnName.toLowerCase() == 'id' ? "1,2,3..." : "Filter";
+
     return Container(
       width: 60, // Adjust width as needed
       height: 25,
@@ -93,7 +129,7 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
             horizontal: 6,
             vertical: 6,
           ),
-          hintText: "Filter",
+          hintText: hintText,
           hintStyle: const TextStyle(fontSize: 10, color: Colors.grey),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
@@ -105,8 +141,7 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
           ),
         ),
         style: const TextStyle(fontSize: 11),
-        onChanged:
-            _applyFilter, // Use onChanged instead of onSubmitted for real-time filtering
+        onChanged: _applyFilter,
       ),
     );
   }

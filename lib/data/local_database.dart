@@ -297,7 +297,7 @@ Then restart the application.
     }
   }
 
-  // Updated to support filtering
+  // Updated to support filtering with comma-separated IDs
   Future<Map<String, dynamic>> getLocalPaginatedProducts(
     int page,
     int pageSize, {
@@ -320,10 +320,52 @@ Then restart the application.
       if (filters.isNotEmpty) {
         List<String> conditions = [];
 
-        // Handle ID filter (exact match)
+        // Handle ID filter with comma-separated values
         if (filters.containsKey('id')) {
-          conditions.add('id = ?');
-          queryArgs.add(int.parse(filters['id']!));
+          final String idFilter = filters['id']!.trim();
+
+          if (idFilter.contains(',')) {
+            // Handle comma-separated IDs
+            List<String> idValues =
+                idFilter
+                    .split(',')
+                    .map((s) => s.trim())
+                    .where((s) => s.isNotEmpty)
+                    .toList();
+
+            if (idValues.isNotEmpty) {
+              // Create placeholders for each ID
+              List<String> idPlaceholders = List.generate(
+                idValues.length,
+                (_) => '?',
+              );
+
+              // Build the IN clause
+              conditions.add('id IN (${idPlaceholders.join(', ')})');
+
+              // Add each ID as a separate argument
+              for (var idVal in idValues) {
+                try {
+                  // Parse each ID value to int
+                  queryArgs.add(int.parse(idVal));
+                } catch (e) {
+                  developer.log('Error parsing ID value: $idVal - $e');
+                  // Skip invalid IDs
+                }
+              }
+            }
+          } else {
+            // Single ID value
+            try {
+              conditions.add('id = ?');
+              queryArgs.add(int.parse(idFilter));
+            } catch (e) {
+              developer.log('Error parsing single ID: $idFilter - $e');
+              // If parsing fails, use an impossible ID to ensure no results
+              conditions.add('id = ?');
+              queryArgs.add(-1);
+            }
+          }
         }
 
         // Add more column filters here in the future
