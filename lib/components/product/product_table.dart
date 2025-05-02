@@ -360,14 +360,14 @@ Widget _buildTableLayout({
     children: [
       // Header row (fixed)
       Table(
-        border: TableBorder.all(color: Colors.grey),
+        border: TableBorder.all(color: Colors.grey.shade300),
         columnWidths: columnWidths.asMap().map(
           (i, w) => MapEntry(i, FixedColumnWidth(w)),
         ),
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
-            decoration: BoxDecoration(color: Colors.grey[200]),
+            decoration: BoxDecoration(color: Colors.blueGrey.shade100),
             children: List.generate(titles.length, (i) {
               return buildColumnHeader(titles[i], i, headerStyle);
             }),
@@ -513,7 +513,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.grey[300],
+      color: Colors.blueGrey.shade50,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -592,19 +592,21 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   // Table rows builder
   Widget _buildTableRows(bool isMobile) {
     return Table(
-      border: TableBorder.all(color: Colors.grey),
+      border: TableBorder.all(color: Colors.grey.shade300),
       columnWidths: _columnWidths.asMap().map(
         (i, w) => MapEntry(i, FixedColumnWidth(w)),
       ),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
-        for (final product in widget.products)
+        for (int index = 0; index < widget.products.length; index++)
           TableRow(
             decoration: BoxDecoration(
               color:
-                  _editManager.editingProduct?.id == product.id
+                  _editManager.editingProduct?.id == widget.products[index].id
                       ? Colors.white
-                      : null,
+                      : const Color(
+                        0xFFE8F5E9,
+                      ), // Light green color for readability
             ),
             children: List.generate(_columnWidths.length, (i) {
               return SizedBox(
@@ -614,7 +616,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                     horizontal: 8.0,
                     vertical: 12.0,
                   ),
-                  child: _buildCell(product, i, isMobile),
+                  child: _buildCell(widget.products[index], i, isMobile),
                 ),
               );
             }),
@@ -842,8 +844,12 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     final String? imageUrl = product.image;
     bool isHovering = false;
 
+    // Check if this product is currently being edited
+    final bool isBeingEdited = _editManager.editingProduct?.id == product.id;
+
     void showEnlargedImage() {
-      if (imageUrl == null) return;
+      // Don't show enlarged image if the product is in edit mode
+      if (imageUrl == null || isBeingEdited) return;
 
       overlayEntry = OverlayEntry(
         builder: (context) {
@@ -909,7 +915,8 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                 height: 40,
                 imageKey: imageKey,
               ),
-              if (isHovering)
+              if (isHovering &&
+                  isBeingEdited) // Only show edit button when product is in edit mode
                 Positioned.fill(
                   child: Container(
                     color: Colors.black.withOpacity(0.5),
@@ -965,6 +972,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         // This modifies the list in place for immediate visual feedback
         widget.products[index] = updatedProduct;
       }
+
+      // If this is the product currently being edited, update the controller too
+      if (_editManager.editingProduct?.id == product.id) {
+        _editManager.imageUrlController.text = newUrl;
+      }
     });
 
     // Show success message
@@ -1001,7 +1013,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     print('Category 2: ${_editManager.category2Controller.text}');
     print('Popular: ${_editManager.editPopular}');
     print('Matching Words: ${_editManager.matchingWordsController.text}');
-    print('Image URL: ${originalProduct.image}');
+    print('Image URL: ${_editManager.imageUrlController.text}');
     print('Created At: ${originalProduct.createdAt}');
     print('Updated At: ${DateTime.now()}');
 

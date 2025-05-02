@@ -13,6 +13,8 @@ class EditableProductManager {
   final TextEditingController category1Controller = TextEditingController();
   final TextEditingController category2Controller = TextEditingController();
   final TextEditingController matchingWordsController = TextEditingController();
+  final TextEditingController imageUrlController =
+      TextEditingController(); // Add image URL controller
   bool editPopular = false;
 
   void startEditing(Product product) {
@@ -24,6 +26,8 @@ class EditableProductManager {
     category1Controller.text = product.category1 ?? '';
     category2Controller.text = product.category2 ?? '';
     matchingWordsController.text = product.matchingWords ?? '';
+    imageUrlController.text =
+        product.image ?? ''; // Initialize image URL controller
     editPopular = product.popularProduct;
   }
 
@@ -39,6 +43,7 @@ class EditableProductManager {
     category1Controller.dispose();
     category2Controller.dispose();
     matchingWordsController.dispose();
+    imageUrlController.dispose(); // Dispose image URL controller
   }
 
   // Build editable cells for the table
