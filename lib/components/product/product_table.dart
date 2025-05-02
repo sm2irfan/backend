@@ -125,7 +125,8 @@ class MobileTableConfig implements ProductTableConfig {
     // Set specific column widths for mobile
     columnWidths[0] = 50.0; // ID
     columnWidths[1] = 80.0; // Created At
-    columnWidths[2] = 50.0; // Image
+    columnWidths[2] =
+        80.0; // Updated At - Fix this value (was incorrectly labeled as Image)
     columnWidths[3] = 50.0; // Image
     columnWidths[4] = 150.0; // Product name
     columnWidths[5] = 70.0; // Price
