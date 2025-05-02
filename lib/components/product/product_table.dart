@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'dart:async'; // Important for Timer class
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'sync_products_button.dart';
-import 'product_image_editor.dart'; // Add import for the new file
+import 'product_image_editor.dart';
+import 'product_filters.dart'; // Import the new filters file
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -90,6 +92,114 @@ class _RefreshButtonState extends State<RefreshButton> {
   }
 }
 
+// Real-time column filter with debouncing
+class ColumnFilterInput extends StatefulWidget {
+  final String columnName;
+  final int currentPage;
+  final int pageSize;
+  final Map<String, String> activeFilters;
+
+  const ColumnFilterInput({
+    Key? key,
+    required this.columnName,
+    required this.currentPage,
+    required this.pageSize,
+    required this.activeFilters,
+  }) : super(key: key);
+
+  @override
+  State<ColumnFilterInput> createState() => _ColumnFilterInputState();
+}
+
+class _ColumnFilterInputState extends State<ColumnFilterInput> {
+  late TextEditingController _controller;
+  Timer? _debounceTimer;
+
+  // Debounce duration (milliseconds to wait after typing stops)
+  static const Duration _debounceDuration = Duration(milliseconds: 500);
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with existing filter value if any
+    _controller = TextEditingController(
+      text: widget.activeFilters[widget.columnName.toLowerCase()] ?? '',
+    );
+  }
+
+  @override
+  void didUpdateWidget(ColumnFilterInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update controller if the filter value has changed
+    if (oldWidget.activeFilters != widget.activeFilters) {
+      final newValue =
+          widget.activeFilters[widget.columnName.toLowerCase()] ?? '';
+      if (_controller.text != newValue) {
+        _controller.text = newValue;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel(); // Important: Cancel timer when disposed
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter(String value) {
+    // Cancel any existing timer
+    _debounceTimer?.cancel();
+
+    // Start a new timer
+    _debounceTimer = Timer(_debounceDuration, () {
+      if (!mounted) return;
+
+      final productBloc = BlocProvider.of<ProductBloc>(context);
+      productBloc.add(
+        FilterProductsByColumn(
+          column: widget.columnName.toLowerCase(),
+          value: value.trim(),
+          page: 1, // Reset to first page when applying filter
+          pageSize: widget.pageSize,
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 60, // Adjust width as needed
+      height: 25,
+      margin: const EdgeInsets.only(top: 4),
+      child: TextField(
+        controller: _controller,
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 6,
+          ),
+          hintText: "Filter",
+          hintStyle: const TextStyle(fontSize: 10, color: Colors.grey),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Theme.of(context).primaryColor),
+          ),
+        ),
+        style: const TextStyle(fontSize: 11),
+        onChanged:
+            _applyFilter, // Use onChanged instead of onSubmitted for real-time filtering
+      ),
+    );
+  }
+}
+
 // MARK: - Table Configuration
 
 /// Base configuration for responsive product tables
@@ -105,7 +215,6 @@ abstract class ProductTableConfig {
     required Function(Product) onEdit,
     required Function(BuildContext, Product) onDelete,
   });
-
   Widget buildTable({
     required List<String> titles,
     required List<double> columnWidths,
@@ -125,8 +234,7 @@ class MobileTableConfig implements ProductTableConfig {
     // Set specific column widths for mobile
     columnWidths[0] = 50.0; // ID
     columnWidths[1] = 80.0; // Created At
-    columnWidths[2] =
-        80.0; // Updated At - Fix this value (was incorrectly labeled as Image)
+    columnWidths[2] = 80.0; // Updated At
     columnWidths[3] = 50.0; // Image
     columnWidths[4] = 150.0; // Product name
     columnWidths[5] = 70.0; // Price
@@ -533,17 +641,67 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ),
           ),
           const Divider(height: 1),
+
+          // Always show the header table with filters
+          Table(
+            border: TableBorder.all(color: Colors.grey.shade300),
+            columnWidths: _columnWidths.asMap().map(
+              (i, w) => MapEntry(i, FixedColumnWidth(w)),
+            ),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.blueGrey.shade100),
+                children: List.generate(_titles.length, (i) {
+                  return _buildColumnHeader(
+                    _titles[i],
+                    i,
+                    _tableConfig.getTextStyle().copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: _isMobileView ? 11.0 : 13.0,
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+
+          // Content area changes based on state
           Expanded(
             child:
-                widget.products.isEmpty
+                widget.isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _tableConfig.buildTable(
-                      titles: _titles,
-                      columnWidths: _columnWidths,
-                      rowHeight: _rowHeight,
-                      verticalScrollController: _verticalScrollController,
-                      buildColumnHeader: _buildColumnHeader,
-                      buildTableRows: _buildTableRows,
+                    : widget.products.isEmpty
+                    ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No products found',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Try adjusting your search or filter criteria',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    )
+                    : SingleChildScrollView(
+                      controller: _verticalScrollController,
+                      scrollDirection: Axis.vertical,
+                      child: _buildTableRows(_isMobileView),
                     ),
           ),
         ],
@@ -555,13 +713,38 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
   // Header column builder with resize capability
   Widget _buildColumnHeader(String title, int index, TextStyle style) {
+    // Get active filters from the BLoC state
+    Map<String, String> activeFilters = {};
+    final state = BlocProvider.of<ProductBloc>(context).state;
+    if (state is ProductsLoaded) {
+      activeFilters = state.activeFilters;
+    }
+
+    // Only add filter input to the ID column (index 0)
+    Widget? filterWidget;
+    if (index == 0) {
+      filterWidget = ColumnFilterInput(
+        columnName: 'id',
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
+      );
+    }
+
     return Stack(
       children: [
         Container(
           height: _rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
           alignment: Alignment.centerLeft,
-          child: SelectableText(title, style: style),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SelectableText(title, style: style),
+              if (filterWidget != null) filterWidget,
+            ],
+          ),
         ),
         Positioned(
           right: 0,
@@ -1057,5 +1240,22 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         ).showSnackBar(SnackBar(content: Text('Deleted: ${product.name}')));
       }
     });
+  }
+
+  void _onPageChanged(int page) {
+    final state = BlocProvider.of<ProductBloc>(context).state;
+    if (state is ProductsLoaded && state.activeFilters.isNotEmpty) {
+      BlocProvider.of<ProductBloc>(context).add(
+        FilterProductsByColumn(
+          column:
+              'id', // This doesn't matter here as we're preserving all filters
+          value: '', // This doesn't matter here as we're preserving all filters
+          page: page,
+          pageSize: widget.pageSize,
+        ),
+      );
+    } else {
+      widget.onPageChanged(page);
+    }
   }
 }

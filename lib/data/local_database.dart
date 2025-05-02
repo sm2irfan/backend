@@ -297,11 +297,12 @@ Then restart the application.
     }
   }
 
-  // Safe version of getLocalPaginatedProducts
+  // Updated to support filtering
   Future<Map<String, dynamic>> getLocalPaginatedProducts(
     int page,
-    int pageSize,
-  ) async {
+    int pageSize, {
+    Map<String, String> filters = const {},
+  }) async {
     if (!await isSqliteAvailable()) {
       throw Exception(
         'SQLite is not available. Please install libsqlite3-dev package.',
@@ -311,21 +312,41 @@ Then restart the application.
     try {
       final db = await database;
 
-      // Get total count for pagination
+      // Start building the query
+      String queryConditions = '';
+      List<dynamic> queryArgs = [];
+
+      // Add filter conditions if any
+      if (filters.isNotEmpty) {
+        List<String> conditions = [];
+
+        // Handle ID filter (exact match)
+        if (filters.containsKey('id')) {
+          conditions.add('id = ?');
+          queryArgs.add(int.parse(filters['id']!));
+        }
+
+        // Add more column filters here in the future
+
+        if (conditions.isNotEmpty) {
+          queryConditions = ' WHERE ${conditions.join(" AND ")}';
+        }
+      }
+
+      // Get total count for pagination with filters applied
       final countResult = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM all_products',
+        'SELECT COUNT(*) as count FROM all_products$queryConditions',
+        queryArgs,
       );
       final totalItems = Sqflite.firstIntValue(countResult) ?? 0;
 
       // Calculate offset based on page number and page size
       final offset = (page - 1) * pageSize;
 
-      // Fetch paginated data
-      final results = await db.query(
-        'all_products',
-        orderBy: 'id DESC',
-        limit: pageSize,
-        offset: offset,
+      // Fetch paginated data with filters
+      final results = await db.rawQuery(
+        'SELECT * FROM all_products$queryConditions ORDER BY id DESC LIMIT ? OFFSET ?',
+        [...queryArgs, pageSize, offset],
       );
 
       // Parse products
@@ -352,7 +373,7 @@ Then restart the application.
                 json['created_at'] != null
                     ? DateTime.parse(json['created_at'] as String)
                     : DateTime(2023, 1, 1),
-            updatedAt: updatedAt, // Add the updatedAt field
+            updatedAt: updatedAt,
             name: json['name'] as String? ?? 'Unnamed Product',
             uPrices: json['uprices'] as String? ?? '0',
             image: json['image'] as String?,

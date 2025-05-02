@@ -112,11 +112,16 @@ class ProductRepository {
 
   Future<Map<String, dynamic>> getPaginatedProducts(
     int page,
-    int pageSize,
-  ) async {
+    int pageSize, {
+    Map<String, String> filters = const {},
+  }) async {
     try {
       // Get data from local database instead of Supabase
-      return await _localDatabase.getLocalPaginatedProducts(page, pageSize);
+      return await _localDatabase.getLocalPaginatedProducts(
+        page,
+        pageSize,
+        filters: filters,
+      );
     } catch (e) {
       throw Exception('Failed to load products: $e');
     }
@@ -207,6 +212,24 @@ class RefreshCurrentPage extends ProductEvent {
   List<Object> get props => [currentPage, pageSize];
 }
 
+// New event for filtering products
+class FilterProductsByColumn extends ProductEvent {
+  final String column;
+  final String value;
+  final int page;
+  final int pageSize;
+
+  const FilterProductsByColumn({
+    required this.column,
+    required this.value,
+    required this.page,
+    required this.pageSize,
+  });
+
+  @override
+  List<Object> get props => [column, value, page, pageSize];
+}
+
 // Updated BLoC States
 abstract class ProductState extends Equatable {
   const ProductState();
@@ -232,6 +255,7 @@ class ProductsLoaded extends ProductState {
   final int currentPage;
   final bool hasNextPage;
   final bool hasPreviousPage;
+  final Map<String, String> activeFilters; // Add active filters to state
 
   const ProductsLoaded({
     required this.products,
@@ -239,6 +263,7 @@ class ProductsLoaded extends ProductState {
     required this.currentPage,
     required this.hasNextPage,
     required this.hasPreviousPage,
+    this.activeFilters = const {}, // Default to empty map
   });
 
   @override
@@ -248,6 +273,7 @@ class ProductsLoaded extends ProductState {
     currentPage,
     hasNextPage,
     hasPreviousPage,
+    activeFilters,
   ];
 }
 
@@ -269,7 +295,8 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     on<LoadPaginatedProducts>(_onLoadPaginatedProducts);
     on<LoadPopularProducts>(_onLoadPopularProducts);
     on<LoadProductsByCategory>(_onLoadProductsByCategory);
-    on<RefreshCurrentPage>(_onRefreshCurrentPage); // Register new handler
+    on<RefreshCurrentPage>(_onRefreshCurrentPage);
+    on<FilterProductsByColumn>(_onFilterProductsByColumn); // Add new handler
   }
 
   Future<void> _onLoadProducts(
@@ -366,7 +393,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     }
   }
 
-  // Handler for the new refresh event
   Future<void> _onRefreshCurrentPage(
     RefreshCurrentPage event,
     Emitter<ProductState> emit,
@@ -374,6 +400,12 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     // Preserve the current page
     final currentState = state;
     bool isFirstLoad = false;
+    Map<String, String> activeFilters = {};
+
+    // Preserve any active filters
+    if (currentState is ProductsLoaded) {
+      activeFilters = currentState.activeFilters;
+    }
 
     // We're refreshing, not doing a first load, so set isFirstLoad to false
     emit(ProductLoading(isFirstLoad: isFirstLoad));
@@ -382,6 +414,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       final result = await _productRepository.getPaginatedProducts(
         event.currentPage,
         event.pageSize,
+        filters: activeFilters,
       );
 
       emit(
@@ -391,6 +424,49 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
           currentPage: event.currentPage,
           hasNextPage: result['hasNextPage'],
           hasPreviousPage: result['hasPreviousPage'],
+          activeFilters: activeFilters,
+        ),
+      );
+    } catch (e) {
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  // New handler for filtering products
+  Future<void> _onFilterProductsByColumn(
+    FilterProductsByColumn event,
+    Emitter<ProductState> emit,
+  ) async {
+    emit(const ProductLoading(isFirstLoad: false));
+
+    try {
+      // Get current active filters
+      Map<String, String> activeFilters = {};
+      if (state is ProductsLoaded) {
+        activeFilters = Map.from((state as ProductsLoaded).activeFilters);
+      }
+
+      // Update the filter for the specified column
+      if (event.value.isEmpty) {
+        activeFilters.remove(event.column); // Remove filter if value is empty
+      } else {
+        activeFilters[event.column] = event.value; // Add or update filter
+      }
+
+      final result = await _productRepository.getPaginatedProducts(
+        event.page,
+        event.pageSize,
+        filters: activeFilters,
+      );
+
+      emit(
+        ProductsLoaded(
+          products: result['products'],
+          totalItems: result['totalItems'],
+          currentPage: event.page,
+          hasNextPage: result['hasNextPage'],
+          hasPreviousPage: result['hasPreviousPage'],
+          activeFilters: activeFilters,
         ),
       );
     } catch (e) {

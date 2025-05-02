@@ -69,7 +69,22 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
     setState(() {
       _pageSize = newSize;
     });
-    _productBloc.add(LoadPaginatedProducts(page: 1, pageSize: _pageSize));
+
+    // Check if we have active filters
+    final state = _productBloc.state;
+    if (state is ProductsLoaded && state.activeFilters.isNotEmpty) {
+      _productBloc.add(
+        FilterProductsByColumn(
+          column: 'id', // This doesn't matter as we're preserving all filters
+          value: '', // This doesn't matter as we're preserving all filters
+          page: 1, // Reset to first page on size change
+          pageSize: newSize,
+        ),
+      );
+    } else {
+      // Original behavior
+      _productBloc.add(LoadPaginatedProducts(page: 1, pageSize: newSize));
+    }
   }
 
   @override
@@ -311,12 +326,32 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                                         constraints: const BoxConstraints(),
                                         onPressed:
                                             state.hasPreviousPage
-                                                ? () => _productBloc.add(
-                                                  LoadPaginatedProducts(
-                                                    page: state.currentPage - 1,
-                                                    pageSize: _pageSize,
-                                                  ),
-                                                )
+                                                ? () {
+                                                  // Check if we have active filters
+                                                  if (state
+                                                      .activeFilters
+                                                      .isNotEmpty) {
+                                                    _productBloc.add(
+                                                      FilterProductsByColumn(
+                                                        column: 'id',
+                                                        value: '',
+                                                        page:
+                                                            state.currentPage -
+                                                            1,
+                                                        pageSize: _pageSize,
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    _productBloc.add(
+                                                      LoadPaginatedProducts(
+                                                        page:
+                                                            state.currentPage -
+                                                            1,
+                                                        pageSize: _pageSize,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
                                                 : null,
                                         tooltip: 'Previous Page',
                                       ),
@@ -331,12 +366,32 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                                         constraints: const BoxConstraints(),
                                         onPressed:
                                             state.hasNextPage
-                                                ? () => _productBloc.add(
-                                                  LoadPaginatedProducts(
-                                                    page: state.currentPage + 1,
-                                                    pageSize: _pageSize,
-                                                  ),
-                                                )
+                                                ? () {
+                                                  // Check if we have active filters
+                                                  if (state
+                                                      .activeFilters
+                                                      .isNotEmpty) {
+                                                    _productBloc.add(
+                                                      FilterProductsByColumn(
+                                                        column: 'id',
+                                                        value: '',
+                                                        page:
+                                                            state.currentPage +
+                                                            1,
+                                                        pageSize: _pageSize,
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    _productBloc.add(
+                                                      LoadPaginatedProducts(
+                                                        page:
+                                                            state.currentPage +
+                                                            1,
+                                                        pageSize: _pageSize,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
                                                 : null,
                                         tooltip: 'Next Page',
                                       ),
@@ -382,12 +437,28 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                                   icon: const Icon(Icons.arrow_back),
                                   onPressed:
                                       state.hasPreviousPage
-                                          ? () => _productBloc.add(
-                                            LoadPaginatedProducts(
-                                              page: state.currentPage - 1,
-                                              pageSize: _pageSize,
-                                            ),
-                                          )
+                                          ? () {
+                                            // Check if we have active filters
+                                            if (state
+                                                .activeFilters
+                                                .isNotEmpty) {
+                                              _productBloc.add(
+                                                FilterProductsByColumn(
+                                                  column: 'id',
+                                                  value: '',
+                                                  page: state.currentPage - 1,
+                                                  pageSize: _pageSize,
+                                                ),
+                                              );
+                                            } else {
+                                              _productBloc.add(
+                                                LoadPaginatedProducts(
+                                                  page: state.currentPage - 1,
+                                                  pageSize: _pageSize,
+                                                ),
+                                              );
+                                            }
+                                          }
                                           : null,
                                   tooltip: 'Previous Page',
                                 ),
@@ -396,12 +467,28 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
                                   icon: const Icon(Icons.arrow_forward),
                                   onPressed:
                                       state.hasNextPage
-                                          ? () => _productBloc.add(
-                                            LoadPaginatedProducts(
-                                              page: state.currentPage + 1,
-                                              pageSize: _pageSize,
-                                            ),
-                                          )
+                                          ? () {
+                                            // Check if we have active filters
+                                            if (state
+                                                .activeFilters
+                                                .isNotEmpty) {
+                                              _productBloc.add(
+                                                FilterProductsByColumn(
+                                                  column: 'id',
+                                                  value: '',
+                                                  page: state.currentPage + 1,
+                                                  pageSize: _pageSize,
+                                                ),
+                                              );
+                                            } else {
+                                              _productBloc.add(
+                                                LoadPaginatedProducts(
+                                                  page: state.currentPage + 1,
+                                                  pageSize: _pageSize,
+                                                ),
+                                              );
+                                            }
+                                          }
                                           : null,
                                   tooltip: 'Next Page',
                                 ),
