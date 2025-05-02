@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'sync_products_button.dart';
+import 'product_image_editor.dart'; // Add import for the new file
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -636,7 +637,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       case 2:
         return _buildDateCell(product.updatedAt, textStyle);
       case 3:
-        return _buildImageCell(product);
+        return _buildProductThumbnail(product);
       case 4:
         return _buildNameCell(
           product,
@@ -839,6 +840,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     final GlobalKey imageKey = GlobalKey();
     OverlayEntry? overlayEntry;
     final String? imageUrl = product.image;
+    bool isHovering = false;
 
     void showEnlargedImage() {
       if (imageUrl == null) return;
@@ -865,7 +867,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                 ),
                 width: 500,
                 height: 500,
-                child: _buildCachedImage(
+                child: ProductImageEditor.buildCachedImage(
                   imageUrl: imageUrl,
                   fit: BoxFit.contain,
                   width: 500,
@@ -886,66 +888,88 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       overlayEntry = null;
     }
 
-    return MouseRegion(
-      onEnter: (_) => showEnlargedImage(),
-      onExit: (_) => hideEnlargedImage(),
-      child: _buildCachedImage(
-        imageUrl: imageUrl,
-        fit: BoxFit.cover,
-        width: 40,
-        height: 40,
-        imageKey: imageKey,
-      ),
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return MouseRegion(
+          onEnter: (_) {
+            setState(() => isHovering = true);
+            showEnlargedImage();
+          },
+          onExit: (_) {
+            setState(() => isHovering = false);
+            hideEnlargedImage();
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ProductImageEditor.buildCachedImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                width: 40,
+                height: 40,
+                imageKey: imageKey,
+              ),
+              if (isHovering)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withOpacity(0.5),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        hideEnlargedImage();
+                        _editProductImage(product);
+                      },
+                      tooltip: 'Edit product image',
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildCachedImage({
-    required String? imageUrl,
-    required BoxFit fit,
-    required double width,
-    required double height,
-    bool isEnlarged = false,
-    Key? imageKey,
-  }) {
-    if (imageUrl == null) {
-      return SizedBox(
-        width: width,
-        height: height,
-        child: Icon(Icons.image_not_supported, size: isEnlarged ? 50 : 20),
-      );
-    }
+  void _editProductImage(Product product) {
+    ProductImageEditor.showEditDialog(context, product, _saveImageUrl);
+  }
 
-    return SizedBox(
-      key: imageKey,
-      width: width,
-      height: height,
-      child: CachedNetworkImage(
-        key: ValueKey('${isEnlarged ? 'enlarged' : 'thumbnail'}-$imageUrl'),
-        imageUrl: imageUrl,
-        fit: fit,
-        progressIndicatorBuilder: (context, url, progress) {
-          if (progress.totalSize == null) {
-            return isEnlarged
-                ? const SizedBox()
-                : const SizedBox(width: 20, height: 20);
-          } else {
-            final percent = progress.downloaded / (progress.totalSize ?? 1);
-            return Center(
-              child: SizedBox(
-                width: isEnlarged ? 40 : 20,
-                height: isEnlarged ? 40 : 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: isEnlarged ? 3 : 2,
-                  value: percent,
-                ),
-              ),
-            );
-          }
-        },
-        errorWidget: (context, url, error) {
-          return Icon(Icons.error_outline, size: isEnlarged ? 50 : 20);
-        },
-      ),
+  // Helper method to save the image URL
+  void _saveImageUrl(Product product, String newUrl) {
+    // Create an updated product with the new image URL
+    final updatedProduct = Product(
+      id: product.id,
+      name: product.name,
+      uPrices: product.uPrices,
+      discount: product.discount,
+      description: product.description,
+      category1: product.category1,
+      category2: product.category2,
+      popularProduct: product.popularProduct,
+      matchingWords: product.matchingWords,
+      createdAt: product.createdAt,
+      updatedAt: DateTime.now(),
+      image: newUrl, // Update with new URL
+    );
+
+    // For immediate visual feedback, update the local state
+    setState(() {
+      // Find the product in the list and update its image URL
+      final index = widget.products.indexWhere((p) => p.id == product.id);
+      if (index >= 0) {
+        // This modifies the list in place for immediate visual feedback
+        widget.products[index] = updatedProduct;
+      }
+    });
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Updated image for: ${product.name}')),
     );
   }
 
@@ -964,11 +988,29 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   void _saveChanges() {
+    final originalProduct = _editManager.editingProduct!;
+
+    // Print the EDITED data from the controllers
+    print('Saving EDITED product data:');
+    print('ID: ${originalProduct.id}');
+    print('Name: ${_editManager.nameController.text}');
+    print('Price: ${_editManager.priceController.text}');
+    print('Description: ${_editManager.descriptionController.text}');
+    print('Discount: ${_editManager.discountController.text}');
+    print('Category 1: ${_editManager.category1Controller.text}');
+    print('Category 2: ${_editManager.category2Controller.text}');
+    print('Popular: ${_editManager.editPopular}');
+    print('Matching Words: ${_editManager.matchingWordsController.text}');
+    print('Image URL: ${originalProduct.image}');
+    print('Created At: ${originalProduct.createdAt}');
+    print('Updated At: ${DateTime.now()}');
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Saved changes to: ${_editManager.editingProduct!.name}'),
+        content: Text('Saved changes to: ${_editManager.nameController.text}'),
       ),
     );
+
     setState(() {
       _editManager.cancelEditing();
     });

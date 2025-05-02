@@ -22,7 +22,8 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  // Remove "const" to avoid rebuild issues
+  MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
