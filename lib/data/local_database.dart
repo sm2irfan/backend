@@ -450,4 +450,47 @@ Then restart the application.
       throw Exception('Failed to load local products: $e');
     }
   }
+
+  // Add method to update a product in the database
+  Future<bool> updateProduct(Product product) async {
+    if (!await isSqliteAvailable()) {
+      throw SqliteNotAvailableException(
+        'SQLite library is not available. Please install SQLite development libraries.',
+      );
+    }
+
+    try {
+      final db = await database;
+
+      // Convert bool to int for SQLite
+      final popularProductInt = product.popularProduct ? 1 : 0;
+
+      // Update the record in the database
+      final rowsAffected = await db.update(
+        'all_products',
+        {
+          'name': product.name,
+          'uprices': product.uPrices,
+          'image': product.image,
+          'discount': product.discount,
+          'description': product.description,
+          'category_1': product.category1,
+          'category_2': product.category2,
+          'popular_product': popularProductInt,
+          'matching_words': product.matchingWords,
+          'updated_at': product.updatedAt?.toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [product.id],
+      );
+
+      developer.log(
+        'Updated product #${product.id}: ${rowsAffected} rows affected',
+      );
+      return rowsAffected > 0;
+    } catch (e) {
+      developer.log('Error updating product: $e');
+      return false;
+    }
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async'; // Important for Timer class
+import '../../data/local_database.dart'; // Add this import for local database
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'sync_products_button.dart';
@@ -1186,6 +1187,40 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   void _saveChanges() {
     final originalProduct = _editManager.editingProduct!;
 
+    // Create an updated product with the edited values
+    final updatedProduct = Product(
+      id: originalProduct.id,
+      name: _editManager.nameController.text,
+      uPrices: _editManager.priceController.text,
+      description:
+          _editManager.descriptionController.text.isNotEmpty
+              ? _editManager.descriptionController.text
+              : null,
+      discount:
+          _editManager.discountController.text.isNotEmpty
+              ? int.tryParse(_editManager.discountController.text)
+              : null,
+      category1:
+          _editManager.category1Controller.text.isNotEmpty
+              ? _editManager.category1Controller.text
+              : null,
+      category2:
+          _editManager.category2Controller.text.isNotEmpty
+              ? _editManager.category2Controller.text
+              : null,
+      popularProduct: _editManager.editPopular,
+      matchingWords:
+          _editManager.matchingWordsController.text.isNotEmpty
+              ? _editManager.matchingWordsController.text
+              : null,
+      image:
+          _editManager.imageUrlController.text.isNotEmpty
+              ? _editManager.imageUrlController.text
+              : null,
+      createdAt: originalProduct.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
     // Print the EDITED data from the controllers
     print('Saving EDITED product data:');
     print('ID: ${originalProduct.id}');
@@ -1201,11 +1236,43 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     print('Created At: ${originalProduct.createdAt}');
     print('Updated At: ${DateTime.now()}');
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Saved changes to: ${_editManager.nameController.text}'),
-      ),
-    );
+    // Update the product in the products list for UI refresh
+    final index = widget.products.indexWhere((p) => p.id == originalProduct.id);
+    if (index >= 0) {
+      setState(() {
+        widget.products[index] = updatedProduct;
+      });
+    }
+
+    // Update product in the local database
+    final LocalDatabase localDB = LocalDatabase();
+    try {
+      // Update the product in the database
+      localDB
+          .updateProduct(updatedProduct)
+          .then((success) {
+            String message;
+            if (success) {
+              message = 'Saved changes to: ${updatedProduct.name}';
+            } else {
+              message = 'Failed to save changes to database';
+            }
+
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
+          })
+          .catchError((error) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${error.toString()}')),
+            );
+          });
+    } catch (e) {
+      print('Error updating product in database: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating database: ${e.toString()}')),
+      );
+    }
 
     setState(() {
       _editManager.cancelEditing();
