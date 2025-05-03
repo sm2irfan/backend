@@ -539,4 +539,30 @@ Then restart the application.
       return false;
     }
   }
+
+  // Add method to delete a product in the database
+  Future<bool> deleteProduct(int productId) async {
+    if (!await isSqliteAvailable()) {
+      throw SqliteNotAvailableException(
+        'SQLite library is not available. Please install SQLite development libraries.',
+      );
+    }
+
+    try {
+      final db = await database;
+
+      // Delete the record from the database
+      final rowsAffected = await db.delete(
+        'all_products',
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+
+      developer.log('Deleted product #$productId: $rowsAffected rows affected');
+      return rowsAffected > 0;
+    } catch (e) {
+      developer.log('Error deleting product: $e');
+      return false;
+    }
+  }
 }

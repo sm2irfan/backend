@@ -186,11 +186,10 @@ class SupabaseProductRepository {
   }
 
   // Delete a product
-  Future<void> deleteProduct(int id) async {
+  Future<void> deleteProduct(int productId) async {
     try {
-      await _supabaseClient.from(_tableName).delete().eq('id', id);
+      await _supabaseClient.from('all_products').delete().eq('id', productId);
     } catch (e) {
-      debugPrint('Error deleting product: $e');
       throw Exception('Failed to delete product: $e');
     }
   }

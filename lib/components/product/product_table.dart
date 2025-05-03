@@ -1460,11 +1460,59 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
           ),
     ).then((confirmed) {
       if (confirmed == true && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Deleted: ${product.name}')));
+        // First, remove the product from the local UI list
+        setState(() {
+          widget.products.removeWhere((p) => p.id == product.id);
+        });
+
+        // Then, delete from the local database
+        _deleteProductFromDatabase(product);
+
+        // Also attempt to delete from Supabase if needed
+        _deleteProductFromSupabase(product);
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Deleted: ${product.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     });
+  }
+
+  // Helper method to delete from local database
+  void _deleteProductFromDatabase(Product product) {
+    final LocalDatabase localDB = LocalDatabase();
+    try {
+      localDB.deleteProduct(product.id).then((success) {
+        if (!success) {
+          print('Failed to delete product from local database: ${product.id}');
+        }
+      });
+    } catch (e) {
+      print('Error deleting product from database: $e');
+    }
+  }
+
+  // Helper method to delete from Supabase
+  void _deleteProductFromSupabase(Product product) {
+    final SupabaseProductRepository supabaseRepo = SupabaseProductRepository();
+
+    supabaseRepo
+        .deleteProduct(product.id)
+        .then((_) {
+          print('Product successfully deleted from Supabase');
+        })
+        .catchError((error) {
+          print('Error deleting product from Supabase: $error');
+
+          // Add this product to error tracking
+          setState(() {
+            _productsWithErrors.add(product.id);
+          });
+        });
   }
 
   void _onPageChanged(int page) {
