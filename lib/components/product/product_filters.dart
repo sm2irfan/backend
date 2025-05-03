@@ -69,16 +69,20 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
 
       final productBloc = BlocProvider.of<ProductBloc>(context);
 
-      // Special handling for ID column to support comma-separated values
-      if (widget.columnName.toLowerCase() == 'id') {
-        // Process comma-separated values
-        final String trimmedValue = value.trim();
+      // Get the lowercase column name for easier comparison
+      final String columnLower = widget.columnName.toLowerCase();
+      final String trimmedValue = value.trim();
 
+      print('Applying filter for column: $columnLower, value: "$trimmedValue"');
+
+      // Special handling for ID column to support comma-separated values
+      if (columnLower == 'id') {
         // Only apply filter if not empty
         if (trimmedValue.isNotEmpty) {
+          print('Adding ID filter event with value: $trimmedValue');
           productBloc.add(
             FilterProductsByColumn(
-              column: widget.columnName.toLowerCase(),
+              column: columnLower,
               value:
                   trimmedValue, // BLoC will handle comma-separated processing
               page: 1, // Reset to first page when applying filter
@@ -86,23 +90,41 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
             ),
           );
         } else {
-          // If value is empty, use the existing FilterProductsByColumn event with empty value
-          // This effectively clears the filter
+          // If value is empty, clear the filter
+          print('Clearing ID filter');
           productBloc.add(
             FilterProductsByColumn(
-              column: widget.columnName.toLowerCase(),
+              column: columnLower,
               value: "", // Empty value to clear the filter
               page: 1,
               pageSize: widget.pageSize,
             ),
           );
         }
-      } else {
-        // Standard filtering for other columns
+      }
+      // Special handling for name column to use SQL LIKE query for partial matching
+      else if (columnLower == 'name') {
+        print('Adding NAME filter with SQL LIKE query: %$trimmedValue%');
+        // Apply the filter with trimmed value and SQL LIKE syntax
         productBloc.add(
           FilterProductsByColumn(
-            column: widget.columnName.toLowerCase(),
-            value: value.trim(),
+            column: columnLower,
+            value: trimmedValue,
+            page: 1, // Reset to first page when applying filter
+            pageSize: widget.pageSize,
+            filterType:
+                'like', // Use SQL LIKE query operator for partial matches
+          ),
+        );
+        print('NAME filter event added to bloc with LIKE query');
+      }
+      // Standard filtering for other columns
+      else {
+        print('Adding standard filter for column: $columnLower');
+        productBloc.add(
+          FilterProductsByColumn(
+            column: columnLower,
+            value: trimmedValue,
             page: 1, // Reset to first page when applying filter
             pageSize: widget.pageSize,
           ),

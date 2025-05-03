@@ -218,16 +218,25 @@ class FilterProductsByColumn extends ProductEvent {
   final String value;
   final int page;
   final int pageSize;
+  final String? filterType; // Add this parameter
 
   const FilterProductsByColumn({
     required this.column,
     required this.value,
     required this.page,
     required this.pageSize,
+    this.filterType, // Make it optional with default null
   });
 
   @override
-  List<Object> get props => [column, value, page, pageSize];
+  List<Object> get props => [
+    column,
+    value,
+    page,
+    pageSize,
+    // Only include filterType when it's not null
+    if (filterType != null) filterType!,
+  ];
 }
 
 // Updated BLoC States
@@ -437,6 +446,15 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     FilterProductsByColumn event,
     Emitter<ProductState> emit,
   ) async {
+    print(
+      'Processing filter event - Column: ${event.column}, Value: "${event.value}", FilterType: ${event.filterType}',
+    );
+
+    // For product name filtering, use specialized function
+    if (event.column.toLowerCase() == 'name' && event.filterType == 'like') {
+      return _onFilterProductsByProductNameColumn(event, emit);
+    }
+
     emit(const ProductLoading(isFirstLoad: false));
 
     try {
@@ -446,18 +464,27 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
         activeFilters = Map.from((state as ProductsLoaded).activeFilters);
       }
 
+      print('Current active filters before update: $activeFilters');
+
       // Update the filter for the specified column
       if (event.value.isEmpty) {
         activeFilters.remove(event.column); // Remove filter if value is empty
+        print('Removed filter for ${event.column}');
       } else {
         activeFilters[event.column] = event.value; // Add or update filter
+        print('Set filter for ${event.column} to "${event.value}"');
       }
+
+      print('Updated active filters: $activeFilters');
+      print('Fetching products with filters: $activeFilters');
 
       final result = await _productRepository.getPaginatedProducts(
         event.page,
         event.pageSize,
         filters: activeFilters,
       );
+
+      print('Fetched ${result['products'].length} products with filters');
 
       emit(
         ProductsLoaded(
@@ -469,7 +496,70 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
           activeFilters: activeFilters,
         ),
       );
+      print('Emitted new state with ${result['products'].length} products');
     } catch (e) {
+      print('Error processing filter: $e');
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  // Specialized handler for product name filtering with LIKE query
+  Future<void> _onFilterProductsByProductNameColumn(
+    FilterProductsByColumn event,
+    Emitter<ProductState> emit,
+  ) async {
+    // Make sure to clean up any LIKE: prefix while preserving exact spaces
+    final String searchTerm = event.value.replaceAll('LIKE:', '');
+    print('Processing name filter with LIKE query: "%$searchTerm%"');
+    emit(const ProductLoading(isFirstLoad: false));
+
+    try {
+      // Get current active filters
+      Map<String, String> activeFilters = {};
+      if (state is ProductsLoaded) {
+        activeFilters = Map.from((state as ProductsLoaded).activeFilters);
+      }
+
+      print('Current active filters before update: $activeFilters');
+
+      // Set special filter value with filterType metadata
+      if (searchTerm.trim().isEmpty) {
+        // Only check if trimmed value is empty
+        activeFilters.remove(event.column); // Remove filter if value is empty
+        print('Removed name filter');
+      } else {
+        // Add or update name filter with a special prefix to indicate LIKE query
+        // Store the exact search term including spaces
+        activeFilters[event.column] = 'LIKE:$searchTerm';
+        print('Set name filter to use LIKE query with: "$searchTerm"');
+      }
+
+      print('Updated active filters for name search: $activeFilters');
+      print('Fetching products with name filter using LIKE query');
+
+      final result = await _productRepository.getPaginatedProducts(
+        event.page,
+        event.pageSize,
+        filters: activeFilters,
+      );
+
+      print('Fetched ${result['products'].length} products with name filter');
+
+      emit(
+        ProductsLoaded(
+          products: result['products'],
+          totalItems: result['totalItems'],
+          currentPage: event.page,
+          hasNextPage: result['hasNextPage'],
+          hasPreviousPage: result['hasPreviousPage'],
+          activeFilters: activeFilters,
+        ),
+      );
+      print(
+        'Emitted new state with ${result['products'].length} products from name filter',
+      );
+    } catch (e) {
+      print('Error processing name filter: $e');
       emit(ProductError(e.toString()));
     }
   }

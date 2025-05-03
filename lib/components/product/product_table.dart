@@ -100,6 +100,10 @@ class ColumnFilterInput extends StatefulWidget {
   final int currentPage;
   final int pageSize;
   final Map<String, String> activeFilters;
+  // Add new properties for customization
+  final double width;
+  final double height;
+  final String? hintText;
 
   const ColumnFilterInput({
     Key? key,
@@ -107,6 +111,9 @@ class ColumnFilterInput extends StatefulWidget {
     required this.currentPage,
     required this.pageSize,
     required this.activeFilters,
+    this.width = 60, // Default width
+    this.height = 25, // Default height
+    this.hintText,
   }) : super(key: key);
 
   @override
@@ -123,10 +130,16 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
   @override
   void initState() {
     super.initState();
-    // Initialize with existing filter value if any
-    _controller = TextEditingController(
-      text: widget.activeFilters[widget.columnName.toLowerCase()] ?? '',
-    );
+    // Initialize with existing filter value if any, removing LIKE: prefix if present
+    String initialValue =
+        widget.activeFilters[widget.columnName.toLowerCase()] ?? '';
+
+    // Remove LIKE: prefix for display in the text field
+    if (initialValue.startsWith('LIKE:')) {
+      initialValue = initialValue.substring(5); // Remove 'LIKE:' prefix
+    }
+
+    _controller = TextEditingController(text: initialValue);
   }
 
   @override
@@ -134,10 +147,22 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
     super.didUpdateWidget(oldWidget);
     // Update controller if the filter value has changed
     if (oldWidget.activeFilters != widget.activeFilters) {
-      final newValue =
+      String newValue =
           widget.activeFilters[widget.columnName.toLowerCase()] ?? '';
-      if (_controller.text != newValue) {
-        _controller.text = newValue;
+
+      // Remove 'LIKE:' prefix for display in the text field
+      if (newValue.startsWith('LIKE:')) {
+        newValue = newValue.substring(5); // Remove 'LIKE:' prefix
+      }
+
+      // Skip automatic update if text is substantially the same
+      // (Ignore trailing/leading spaces for comparison, but preserve them in value)
+      if (_controller.text.trim() != newValue.trim()) {
+        // Set value without triggering change events
+        _controller.value = TextEditingValue(
+          text: newValue,
+          selection: TextSelection.collapsed(offset: newValue.length),
+        );
       }
     }
   }
@@ -153,27 +178,59 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
     // Cancel any existing timer
     _debounceTimer?.cancel();
 
+    // Store the current value locally
+    final String currentText = value;
+
     // Start a new timer
     _debounceTimer = Timer(_debounceDuration, () {
       if (!mounted) return;
 
       final productBloc = BlocProvider.of<ProductBloc>(context);
-      productBloc.add(
-        FilterProductsByColumn(
-          column: widget.columnName.toLowerCase(),
-          value: value.trim(),
-          page: 1, // Reset to first page when applying filter
-          pageSize: widget.pageSize,
-        ),
-      );
+
+      // Get lowercase column name for comparison
+      final String columnLower = widget.columnName.toLowerCase();
+
+      // For name filtering, preserve spaces exactly as typed
+      final String processedValue =
+          columnLower == 'name'
+              ? currentText.replaceAll('LIKE:', '') // Only remove LIKE: prefix
+              : currentText.trim(); // For other columns, just trim
+
+      // Add special handling for name column to support partial matching
+      if (columnLower == 'name') {
+        print('Adding name filter with LIKE query: "$processedValue"');
+        productBloc.add(
+          FilterProductsByColumn(
+            column: columnLower,
+            value: processedValue,
+            page: 1,
+            pageSize: widget.pageSize,
+            filterType: 'like', // Add this parameter for name filtering
+          ),
+        );
+      } else {
+        productBloc.add(
+          FilterProductsByColumn(
+            column: columnLower,
+            value: processedValue,
+            page: 1,
+            pageSize: widget.pageSize,
+          ),
+        );
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Show different hint text based on column type
+    final String hintText =
+        widget.hintText ??
+        (widget.columnName.toLowerCase() == 'id' ? "1,2,3..." : "Filter");
+
     return Container(
-      width: 60, // Adjust width as needed
-      height: 25,
+      width: widget.width, // Use customizable width
+      height: widget.height, // Use customizable height
       margin: const EdgeInsets.only(top: 4),
       child: TextField(
         controller: _controller,
@@ -183,8 +240,11 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
             horizontal: 6,
             vertical: 6,
           ),
-          hintText: "Filter",
-          hintStyle: const TextStyle(fontSize: 10, color: Colors.grey),
+          hintText: hintText,
+          hintStyle: TextStyle(
+            fontSize: widget.width > 60 ? 12 : 10,
+            color: Colors.grey,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
             borderSide: BorderSide(color: Colors.grey.shade400),
@@ -194,9 +254,8 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
             borderSide: BorderSide(color: Theme.of(context).primaryColor),
           ),
         ),
-        style: const TextStyle(fontSize: 11),
-        onChanged:
-            _applyFilter, // Use onChanged instead of onSubmitted for real-time filtering
+        style: TextStyle(fontSize: widget.width > 60 ? 13 : 11),
+        onChanged: _applyFilter,
       ),
     );
   }
@@ -725,7 +784,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       activeFilters = state.activeFilters;
     }
 
-    // Only add filter input to the ID column (index 0)
+    // Add filter input to the ID column (index 0) and the Product name column (index 4)
     Widget? filterWidget;
     if (index == 0) {
       filterWidget = ColumnFilterInput(
@@ -733,6 +792,16 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         currentPage: widget.currentPage,
         pageSize: widget.pageSize,
         activeFilters: activeFilters,
+      );
+    } else if (index == 4) {
+      filterWidget = ColumnFilterInput(
+        columnName: 'name',
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
+        width: 120, // Larger width for product name filter
+        height: 30, // Adjust height if needed
+        hintText: "Search by name", // Custom hint text
       );
     }
 

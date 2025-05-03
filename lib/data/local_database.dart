@@ -297,7 +297,7 @@ Then restart the application.
     }
   }
 
-  // Updated to support filtering with comma-separated IDs
+  // Updated to support filtering with comma-separated IDs and LIKE queries for name
   Future<Map<String, dynamic>> getLocalPaginatedProducts(
     int page,
     int pageSize, {
@@ -364,6 +364,52 @@ Then restart the application.
               // If parsing fails, use an impossible ID to ensure no results
               conditions.add('id = ?');
               queryArgs.add(-1);
+            }
+          }
+        }
+
+        // Handle name filter with LIKE query support
+        if (filters.containsKey('name')) {
+          final String nameFilter = filters['name']!.trim();
+
+          if (nameFilter.isNotEmpty) {
+            // Check if the value starts with the LIKE: prefix
+            if (nameFilter.startsWith('LIKE:')) {
+              // Extract the actual search term
+              final String searchTerm = nameFilter.substring(5).trim();
+
+              if (searchTerm.contains(' ')) {
+                // Handle multi-word search by creating multiple LIKE conditions
+                final List<String> words =
+                    searchTerm.split(' ').where((w) => w.isNotEmpty).toList();
+                if (words.isNotEmpty) {
+                  List<String> wordConditions = [];
+
+                  // Create a LIKE condition for each word
+                  for (var word in words) {
+                    wordConditions.add('name LIKE ?');
+                    queryArgs.add('%$word%');
+                  }
+
+                  // Join all word conditions with AND
+                  conditions.add('(${wordConditions.join(' AND ')})');
+
+                  developer.log(
+                    'Added multi-word LIKE query for name with words: $words',
+                  );
+                }
+              } else {
+                // Single word search - existing behavior
+                conditions.add('name LIKE ?');
+                queryArgs.add('%$searchTerm%');
+
+                developer.log('Added LIKE query for name: %$searchTerm%');
+              }
+            } else {
+              // Standard exact match
+              conditions.add('name = ?');
+              queryArgs.add(nameFilter);
+              developer.log('Added exact match query for name: $nameFilter');
             }
           }
         }
