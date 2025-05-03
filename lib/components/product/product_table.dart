@@ -123,6 +123,8 @@ class ColumnFilterInput extends StatefulWidget {
 class _ColumnFilterInputState extends State<ColumnFilterInput> {
   late TextEditingController _controller;
   Timer? _debounceTimer;
+  // Add a FocusNode to manage focus persistence
+  final FocusNode _focusNode = FocusNode();
 
   // Debounce duration (milliseconds to wait after typing stops)
   static const Duration _debounceDuration = Duration(milliseconds: 500);
@@ -156,13 +158,27 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
       }
 
       // Skip automatic update if text is substantially the same
-      // (Ignore trailing/leading spaces for comparison, but preserve them in value)
       if (_controller.text.trim() != newValue.trim()) {
+        // Save cursor position and selection
+        final int cursorPosition = _controller.selection.baseOffset;
+
         // Set value without triggering change events
         _controller.value = TextEditingValue(
           text: newValue,
-          selection: TextSelection.collapsed(offset: newValue.length),
+          selection: TextSelection.collapsed(
+            // If cursor position was valid, keep it or adjust it
+            offset:
+                cursorPosition > -1 && cursorPosition <= newValue.length
+                    ? cursorPosition
+                    : newValue.length,
+          ),
         );
+
+        // Restore focus if it was active before
+        if (_focusNode.hasFocus) {
+          // Schedule a microtask to ensure focus is restored after the build
+          Future.microtask(() => _focusNode.requestFocus());
+        }
       }
     }
   }
@@ -171,6 +187,7 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
   void dispose() {
     _debounceTimer?.cancel(); // Important: Cancel timer when disposed
     _controller.dispose();
+    _focusNode.dispose(); // Dispose the focus node
     super.dispose();
   }
 
@@ -234,6 +251,7 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
       margin: const EdgeInsets.only(top: 4),
       child: TextField(
         controller: _controller,
+        focusNode: _focusNode, // Set the focus node
         decoration: InputDecoration(
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
