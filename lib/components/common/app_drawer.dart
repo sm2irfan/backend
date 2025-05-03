@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../image_upload/image_upload_page.dart';
 
 class AppDrawer extends StatelessWidget {
   final String currentPage;
@@ -74,8 +75,11 @@ class AppDrawer extends StatelessWidget {
             onTap: () {
               onPageSelected('Image Upload');
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Image Upload page coming soon')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ImageUploadPage(),
+                ),
               );
             },
           ),

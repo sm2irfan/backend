@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'components/image_upload/image_upload_page.dart';
 import 'components/product/product.dart';
 import 'components/auth/login_page.dart';
 import 'data/local_database.dart';
@@ -38,6 +39,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginPage(),
         '/home': (context) => const ProductApp(),
+        '/image-upload': (context) => const ImageUploadPage(),
       },
     );
   }
