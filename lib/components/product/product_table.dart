@@ -8,6 +8,7 @@ import 'editable_product_manager.dart';
 import 'sync_products_button.dart';
 import 'product_image_editor.dart';
 import 'product_filters.dart'; // Import the new filters file
+import 'supabase_product_bloc.dart'; // Add import for Supabase product bloc
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -556,6 +557,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   bool _isMobileView = false;
   final EditableProductManager _editManager = EditableProductManager();
 
+  // Add a Set to track product IDs with update errors
+  final Set<int> _productsWithErrors = {};
+
   // Table configuration based on screen size
   late ProductTableConfig _tableConfig;
 
@@ -786,12 +790,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         for (int index = 0; index < widget.products.length; index++)
           TableRow(
             decoration: BoxDecoration(
-              color:
-                  _editManager.editingProduct?.id == widget.products[index].id
-                      ? Colors.white
-                      : const Color(
-                        0xFFE8F5E9,
-                      ), // Light green color for readability
+              color: _getRowColor(widget.products[index].id),
             ),
             children: List.generate(_columnWidths.length, (i) {
               return SizedBox(
@@ -808,6 +807,17 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
           ),
       ],
     );
+  }
+
+  // Add a helper method to determine row color based on state
+  Color _getRowColor(int productId) {
+    if (_editManager.editingProduct?.id == productId) {
+      return Colors.white; // Editing state
+    } else if (_productsWithErrors.contains(productId)) {
+      return const Color(0xFFFFCDD2); // Light red for error state
+    } else {
+      return const Color(0xFFE8F5E9); // Default green
+    }
   }
 
   // Cell builder based on column index
@@ -1261,6 +1271,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(content: Text(message)));
+
+            // If local update was successful, also update to Supabase
+            if (success) {
+              _updateToSupabase(updatedProduct);
+            }
           })
           .catchError((error) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1277,6 +1292,62 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     setState(() {
       _editManager.cancelEditing();
     });
+  }
+
+  // Update the Supabase update method to track errors
+  void _updateToSupabase(Product updatedProduct) {
+    // Create Supabase repository instance
+    final SupabaseProductRepository supabaseRepo = SupabaseProductRepository();
+
+    // Convert Product model to SupabaseProduct model
+    final supabaseProduct = SupabaseProduct(
+      id: updatedProduct.id,
+      createdAt: updatedProduct.createdAt,
+      updatedAt: updatedProduct.updatedAt,
+      name: updatedProduct.name,
+      uPrices: updatedProduct.uPrices,
+      image: updatedProduct.image,
+      discount: updatedProduct.discount,
+      description: updatedProduct.description,
+      category1: updatedProduct.category1,
+      category2: updatedProduct.category2,
+      popularProduct: updatedProduct.popularProduct,
+      matchingWords: updatedProduct.matchingWords,
+    );
+
+    // Update in Supabase
+    supabaseRepo
+        .updateProduct(supabaseProduct)
+        .then((updatedSupabaseProduct) {
+          print('Product successfully updated in Supabase');
+
+          // Remove this product from error tracking if it was there
+          setState(() {
+            _productsWithErrors.remove(updatedProduct.id);
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Synced to Supabase: ${updatedProduct.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        })
+        .catchError((error) {
+          print('Error updating product in Supabase: $error');
+
+          // Add this product to error tracking
+          setState(() {
+            _productsWithErrors.add(updatedProduct.id);
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to sync to Supabase: ${error.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        });
   }
 
   void _showDeleteConfirmation(BuildContext context, Product product) {
