@@ -9,6 +9,7 @@ import 'sync_products_button.dart';
 import 'product_image_editor.dart';
 import 'product_filters.dart'; // Import the new filters file
 import 'supabase_product_bloc.dart'; // Add import for Supabase product bloc
+import 'add_product_manager.dart'; // Add this import for AddProductManager
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -634,6 +635,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   bool _isMobileView = false;
   final EditableProductManager _editManager = EditableProductManager();
 
+  // Replace the isAddingNewProduct flag with the AddProductManager
+  late AddProductManager _addProductManager;
+
   // Add a Set to track product IDs with update errors
   final Set<int> _productsWithErrors = {};
 
@@ -662,6 +666,20 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     super.initState();
     _tableConfig = DesktopTableConfig(); // Default to desktop
     _initializeColumnWidths();
+
+    // Initialize the AddProductManager with onStateChanged parameter
+    _addProductManager = AddProductManager(
+      editManager: _editManager,
+      scrollController: _verticalScrollController,
+      onProductCreated: (product) {
+        setState(() {
+          widget.products.insert(0, product);
+        });
+      },
+      onStateChanged: (callback) {
+        setState(callback);
+      },
+    );
   }
 
   @override
@@ -708,13 +726,20 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Add a row containing both buttons with space between them
+          // Add a row containing buttons
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SyncProductsButton(),
+                Row(
+                  children: [
+                    const SyncProductsButton(),
+                    const SizedBox(width: 8),
+                    // Replace the Add Product button with the one from the manager
+                    _addProductManager.buildAddProductButton(),
+                  ],
+                ),
                 RefreshButton(
                   currentPage: widget.currentPage,
                   pageSize: widget.pageSize,
@@ -753,8 +778,14 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             child:
                 widget.isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : widget.products.isEmpty
-                    ? Center(
+                    : (_addProductManager.isAddingNewProduct ||
+                        widget.products.isNotEmpty)
+                    ? SingleChildScrollView(
+                      controller: _verticalScrollController,
+                      scrollDirection: Axis.vertical,
+                      child: _buildTableWithNewRow(),
+                    )
+                    : Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -777,13 +808,21 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                             'Try adjusting your search or filter criteria',
                             style: TextStyle(color: Colors.grey.shade600),
                           ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.add, color: Colors.white),
+                            label: const Text('Add New Product'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed:
+                                () => setState(() {
+                                  _addProductManager.startAddingNewProduct();
+                                }),
+                          ),
                         ],
                       ),
-                    )
-                    : SingleChildScrollView(
-                      controller: _verticalScrollController,
-                      scrollDirection: Axis.vertical,
-                      child: _buildTableRows(_isMobileView),
                     ),
           ),
         ],
@@ -791,82 +830,8 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     );
   }
 
-  // MARK: - UI Components
-
-  // Header column builder with resize capability
-  Widget _buildColumnHeader(String title, int index, TextStyle style) {
-    // Get active filters from the BLoC state
-    Map<String, String> activeFilters = {};
-    final state = BlocProvider.of<ProductBloc>(context).state;
-    if (state is ProductsLoaded) {
-      activeFilters = state.activeFilters;
-    }
-
-    // Add filter input to the ID column (index 0) and the Product name column (index 4)
-    Widget? filterWidget;
-    if (index == 0) {
-      filterWidget = ColumnFilterInput(
-        columnName: 'id',
-        currentPage: widget.currentPage,
-        pageSize: widget.pageSize,
-        activeFilters: activeFilters,
-      );
-    } else if (index == 4) {
-      filterWidget = ColumnFilterInput(
-        columnName: 'name',
-        currentPage: widget.currentPage,
-        pageSize: widget.pageSize,
-        activeFilters: activeFilters,
-        width: 120, // Larger width for product name filter
-        height: 30, // Adjust height if needed
-        hintText: "Search by name", // Custom hint text
-      );
-    }
-
-    return Stack(
-      children: [
-        Container(
-          height: _rowHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-          alignment: Alignment.centerLeft,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SelectableText(title, style: style),
-              if (filterWidget != null) filterWidget,
-            ],
-          ),
-        ),
-        Positioned(
-          right: 0,
-          top: 0,
-          bottom: 0,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragUpdate: (d) {
-                setState(() {
-                  _columnWidths[index] = (_columnWidths[index] + d.delta.dx)
-                      .clamp(30.0, double.infinity);
-                });
-              },
-              onVerticalDragUpdate: (d) {
-                setState(() {
-                  _rowHeight = (_rowHeight + d.delta.dy).clamp(40.0, 200.0);
-                });
-              },
-              child: Container(width: 10, color: Colors.transparent),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Table rows builder
-  Widget _buildTableRows(bool isMobile) {
+  // Modify the _buildTableWithNewRow method
+  Widget _buildTableWithNewRow() {
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300),
       columnWidths: _columnWidths.asMap().map(
@@ -874,6 +839,29 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       ),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
+        // Add new product row at the top if in add mode
+        if (_addProductManager.isAddingNewProduct)
+          TableRow(
+            decoration: const BoxDecoration(color: Colors.white),
+            children: List.generate(_columnWidths.length, (i) {
+              return SizedBox(
+                height: _rowHeight,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8.0,
+                    vertical: 12.0,
+                  ),
+                  child: _addProductManager.buildNewProductCell(
+                    context,
+                    i,
+                    _tableConfig.getTextStyle(),
+                  ),
+                ),
+              );
+            }),
+          ),
+
+        // Existing products
         for (int index = 0; index < widget.products.length; index++)
           TableRow(
             decoration: BoxDecoration(
@@ -887,7 +875,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                     horizontal: 8.0,
                     vertical: 12.0,
                   ),
-                  child: _buildCell(widget.products[index], i, isMobile),
+                  child: _buildCell(widget.products[index], i, _isMobileView),
                 ),
               );
             }),
@@ -1270,6 +1258,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   // MARK: - Event Handlers
 
   void _startEditing(Product product) {
+    // First check if we're adding a new product and cancel that operation
+    _addProductManager.checkAndCancelAddNewProduct();
+
     setState(() {
       _editManager.startEditing(product);
     });
@@ -1530,5 +1521,77 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     } else {
       widget.onPageChanged(page);
     }
+  }
+
+  // Header column builder with resize capability
+  Widget _buildColumnHeader(String title, int index, TextStyle style) {
+    // Get active filters from the BLoC state
+    Map<String, String> activeFilters = {};
+    final state = BlocProvider.of<ProductBloc>(context).state;
+    if (state is ProductsLoaded) {
+      activeFilters = state.activeFilters;
+    }
+
+    // Add filter input to the ID column (index 0) and the Product name column (index 4)
+    Widget? filterWidget;
+    if (index == 0) {
+      filterWidget = ColumnFilterInput(
+        columnName: 'id',
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
+      );
+    } else if (index == 4) {
+      filterWidget = ColumnFilterInput(
+        columnName: 'name',
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
+        width: 120, // Larger width for product name filter
+        height: 30, // Adjust height if needed
+        hintText: "Search by name", // Custom hint text
+      );
+    }
+
+    return Stack(
+      children: [
+        Container(
+          height: _rowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+          alignment: Alignment.centerLeft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SelectableText(title, style: style),
+              if (filterWidget != null) filterWidget,
+            ],
+          ),
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeColumn,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (d) {
+                setState(() {
+                  _columnWidths[index] = (_columnWidths[index] + d.delta.dx)
+                      .clamp(30.0, double.infinity);
+                });
+              },
+              onVerticalDragUpdate: (d) {
+                setState(() {
+                  _rowHeight = (_rowHeight + d.delta.dy).clamp(40.0, 200.0);
+                });
+              },
+              child: Container(width: 10, color: Colors.transparent),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
