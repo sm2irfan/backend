@@ -169,6 +169,101 @@ class ProductValidators {
       );
     }
   }
+
+  /// Builds an editable category cell with autocomplete
+  static Widget buildEditableCategoryCell(
+    BuildContext context,
+    TextEditingController controller,
+    String label,
+    Function(Function()) onStateChanged,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: Autocomplete<String>(
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text.isEmpty) {
+            return validCategories;
+          }
+          return validCategories.where(
+            (category) => category.toLowerCase().contains(
+              textEditingValue.text.toLowerCase(),
+            ),
+          );
+        },
+        onSelected: (String selection) {
+          onStateChanged(() {
+            controller.text = selection;
+          });
+        },
+        fieldViewBuilder: (
+          BuildContext context,
+          TextEditingController fieldController,
+          FocusNode fieldFocusNode,
+          VoidCallback onFieldSubmitted,
+        ) {
+          // Sync the autocomplete controller with our actual controller
+          fieldController.text = controller.text;
+
+          return TextField(
+            controller: fieldController,
+            focusNode: fieldFocusNode,
+            style: const TextStyle(fontSize: 13.0),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 10,
+              ),
+              border: InputBorder.none,
+              hintText: label,
+              suffixIcon: const Icon(Icons.arrow_drop_down, size: 16),
+            ),
+            onChanged: (value) {
+              // Update our actual controller when text changes
+              controller.text = value;
+            },
+          );
+        },
+        optionsViewBuilder: (
+          BuildContext context,
+          AutocompleteOnSelected<String> onSelected,
+          Iterable<String> options,
+        ) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 4.0,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxHeight: 200,
+                  maxWidth: 200,
+                ),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(8.0),
+                  itemCount: options.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    final String option = options.elementAt(index);
+                    return InkWell(
+                      onTap: () {
+                        onSelected(option);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          option,
+                          style: const TextStyle(fontSize: 13.0),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 /// Represents a validation result with status and optional error message

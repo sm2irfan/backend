@@ -212,11 +212,21 @@ class AddProductManager {
         // Discount
         return editManager.buildEditableDiscountCell();
       case 8:
-        // Category 1
-        return editManager.buildEditableCategory1Cell();
+        // Category 1 with autocomplete
+        return ProductValidators.buildEditableCategoryCell(
+          context,
+          editManager.category1Controller,
+          "Category 1",
+          onStateChanged,
+        );
       case 9:
-        // Category 2
-        return editManager.buildEditableCategory2Cell();
+        // Category 2 with autocomplete
+        return ProductValidators.buildEditableCategoryCell(
+          context,
+          editManager.category2Controller,
+          "Category 2",
+          onStateChanged,
+        );
       case 10:
         // Popular
         return editManager.buildEditablePopularCell((value) {
@@ -299,5 +309,99 @@ class AddProductManager {
         editManager.imageUrlController.text = newUrl;
       });
     });
+  }
+
+  // Helper method to build category cells with autocomplete
+  Widget _buildEditableCategoryCell(
+    BuildContext context,
+    TextEditingController controller,
+    String label,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: Autocomplete<String>(
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text.isEmpty) {
+            return ProductValidators.validCategories;
+          }
+          return ProductValidators.validCategories.where(
+            (category) => category.toLowerCase().contains(
+              textEditingValue.text.toLowerCase(),
+            ),
+          );
+        },
+        onSelected: (String selection) {
+          onStateChanged(() {
+            controller.text = selection;
+          });
+        },
+        fieldViewBuilder: (
+          BuildContext context,
+          TextEditingController fieldController,
+          FocusNode fieldFocusNode,
+          VoidCallback onFieldSubmitted,
+        ) {
+          // Sync the autocomplete controller with our actual controller
+          fieldController.text = controller.text;
+
+          return TextField(
+            controller: fieldController,
+            focusNode: fieldFocusNode,
+            style: const TextStyle(fontSize: 13.0),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 10,
+              ),
+              border: InputBorder.none,
+              hintText: label,
+              suffixIcon: const Icon(Icons.arrow_drop_down, size: 16),
+            ),
+            onChanged: (value) {
+              // Update our actual controller when text changes
+              controller.text = value;
+            },
+          );
+        },
+        optionsViewBuilder: (
+          BuildContext context,
+          AutocompleteOnSelected<String> onSelected,
+          Iterable<String> options,
+        ) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 4.0,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxHeight: 200,
+                  maxWidth: 200,
+                ),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(8.0),
+                  itemCount: options.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    final String option = options.elementAt(index);
+                    return InkWell(
+                      onTap: () {
+                        onSelected(option);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          option,
+                          style: const TextStyle(fontSize: 13.0),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }

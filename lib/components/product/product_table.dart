@@ -1046,9 +1046,14 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     required bool isCategory1,
   }) {
     if (isEditing) {
-      return isCategory1
-          ? _editManager.buildEditableCategory1Cell()
-          : _editManager.buildEditableCategory2Cell();
+      return ProductValidators.buildEditableCategoryCell(
+        context,
+        isCategory1
+            ? _editManager.category1Controller
+            : _editManager.category2Controller,
+        isCategory1 ? "Category 1" : "Category 2",
+        (callback) => setState(callback),
+      );
     } else {
       final String text =
           isCategory1 ? (product.category1 ?? '') : (product.category2 ?? '');
