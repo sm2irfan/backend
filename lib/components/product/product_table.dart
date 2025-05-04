@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async'; // Important for Timer class
 import '../../data/local_database.dart'; // Add this import for local database
+import '../../utils/product_validators.dart';
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'sync_products_button.dart';
@@ -1275,15 +1276,44 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   void _saveChanges() {
     final originalProduct = _editManager.editingProduct!;
 
+    // Prepare values for validation
+    String priceValue = _editManager.priceController.text.trim();
+    if (priceValue.isEmpty) {
+      priceValue = '0'; // Default value
+    }
+
+    // Validate all product fields
+    final validationResult = ProductValidators.validateProduct(
+      price: priceValue,
+      discount:
+          _editManager.discountController.text.isNotEmpty
+              ? _editManager.discountController.text
+              : null,
+      category1:
+          _editManager.category1Controller.text.isNotEmpty
+              ? _editManager.category1Controller.text
+              : null,
+      category2:
+          _editManager.category2Controller.text.isNotEmpty
+              ? _editManager.category2Controller.text
+              : null,
+      name: _editManager.nameController.text.trim(),
+      description: _editManager.descriptionController.text.trim(),
+      image: _editManager.imageUrlController.text.trim(),
+    );
+
+    // Show error and return if validation failed
+    if (!validationResult.isValid) {
+      ProductValidators.showValidationError(context, validationResult);
+      return;
+    }
+
     // Create an updated product with the edited values
     final updatedProduct = Product(
       id: originalProduct.id,
-      name: _editManager.nameController.text,
-      uPrices: _editManager.priceController.text,
-      description:
-          _editManager.descriptionController.text.isNotEmpty
-              ? _editManager.descriptionController.text
-              : null,
+      name: _editManager.nameController.text.trim(),
+      uPrices: priceValue,
+      description: _editManager.descriptionController.text.trim(),
       discount:
           _editManager.discountController.text.isNotEmpty
               ? int.tryParse(_editManager.discountController.text)
@@ -1301,28 +1331,10 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
           _editManager.matchingWordsController.text.isNotEmpty
               ? _editManager.matchingWordsController.text
               : null,
-      image:
-          _editManager.imageUrlController.text.isNotEmpty
-              ? _editManager.imageUrlController.text
-              : null,
+      image: _editManager.imageUrlController.text.trim(),
       createdAt: originalProduct.createdAt,
       updatedAt: DateTime.now(),
     );
-
-    // Print the EDITED data from the controllers
-    print('Saving EDITED product data:');
-    print('ID: ${originalProduct.id}');
-    print('Name: ${_editManager.nameController.text}');
-    print('Price: ${_editManager.priceController.text}');
-    print('Description: ${_editManager.descriptionController.text}');
-    print('Discount: ${_editManager.discountController.text}');
-    print('Category 1: ${_editManager.category1Controller.text}');
-    print('Category 2: ${_editManager.category2Controller.text}');
-    print('Popular: ${_editManager.editPopular}');
-    print('Matching Words: ${_editManager.matchingWordsController.text}');
-    print('Image URL: ${_editManager.imageUrlController.text}');
-    print('Created At: ${originalProduct.createdAt}');
-    print('Updated At: ${DateTime.now()}');
 
     // Update the product in the products list for UI refresh
     final index = widget.products.indexWhere((p) => p.id == originalProduct.id);

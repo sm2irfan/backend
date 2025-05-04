@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'product.dart';
 import 'editable_product_manager.dart';
-import 'product_image_editor.dart'; // Add this import
+import 'product_image_editor.dart';
+import '../../utils/product_validators.dart';
 
 /// A class to manage adding new products in the product table
 class AddProductManager {
@@ -87,6 +88,38 @@ class AddProductManager {
 
   /// Save the new product
   void saveNewProduct(BuildContext context) {
+    // Prepare values for validation
+    String priceValue = editManager.priceController.text.trim();
+    if (priceValue.isEmpty) {
+      priceValue = '0'; // Default value
+    }
+
+    // Validate all product fields
+    final validationResult = ProductValidators.validateProduct(
+      price: priceValue,
+      discount:
+          editManager.discountController.text.isNotEmpty
+              ? editManager.discountController.text
+              : null,
+      category1:
+          editManager.category1Controller.text.isNotEmpty
+              ? editManager.category1Controller.text
+              : null,
+      category2:
+          editManager.category2Controller.text.isNotEmpty
+              ? editManager.category2Controller.text
+              : null,
+      name: editManager.nameController.text.trim(),
+      description: editManager.descriptionController.text.trim(),
+      image: editManager.imageUrlController.text.trim(),
+    );
+
+    // Show error and return if validation failed
+    if (!validationResult.isValid) {
+      ProductValidators.showValidationError(context, validationResult);
+      return;
+    }
+
     // Generate a temporary ID (in a real app, this would come from the database)
     final int tempId = DateTime.now().millisecondsSinceEpoch;
     final DateTime now = DateTime.now();
@@ -96,18 +129,9 @@ class AddProductManager {
       id: tempId,
       createdAt: now,
       updatedAt: now,
-      name:
-          editManager.nameController.text.isEmpty
-              ? 'Unnamed Product'
-              : editManager.nameController.text,
-      uPrices:
-          editManager.priceController.text.isEmpty
-              ? '0'
-              : editManager.priceController.text,
-      description:
-          editManager.descriptionController.text.isNotEmpty
-              ? editManager.descriptionController.text
-              : null,
+      name: editManager.nameController.text.trim(),
+      uPrices: priceValue,
+      description: editManager.descriptionController.text.trim(),
       discount:
           editManager.discountController.text.isNotEmpty
               ? int.tryParse(editManager.discountController.text)
@@ -125,10 +149,7 @@ class AddProductManager {
           editManager.matchingWordsController.text.isNotEmpty
               ? editManager.matchingWordsController.text
               : null,
-      image:
-          editManager.imageUrlController.text.isNotEmpty
-              ? editManager.imageUrlController.text
-              : null,
+      image: editManager.imageUrlController.text.trim(),
     );
 
     // Notify parent that a new product has been created
@@ -268,8 +289,7 @@ class AddProductManager {
       uPrices: '0',
       createdAt: DateTime.now(),
       image: editManager.imageUrlController.text,
-      popularProduct:
-          editManager.editPopular, // Add the missing required parameter
+      popularProduct: editManager.editPopular,
     );
 
     // Show the same image editor dialog used for existing products
