@@ -565,4 +565,42 @@ Then restart the application.
       return false;
     }
   }
+
+  // Add method to insert a new product in the database
+  Future<bool> insertProduct(Product product) async {
+    if (!await isSqliteAvailable()) {
+      throw SqliteNotAvailableException(
+        'SQLite library is not available. Please install SQLite development libraries.',
+      );
+    }
+
+    try {
+      final db = await database;
+
+      // Convert bool to int for SQLite
+      final popularProductInt = product.popularProduct ? 1 : 0;
+
+      // Insert the new product into the database
+      final id = await db.insert('all_products', {
+        'id': product.id,
+        'created_at': product.createdAt.toIso8601String(),
+        'updated_at': product.updatedAt?.toIso8601String(),
+        'name': product.name,
+        'uprices': product.uPrices,
+        'image': product.image,
+        'discount': product.discount,
+        'description': product.description,
+        'category_1': product.category1,
+        'category_2': product.category2,
+        'popular_product': popularProductInt,
+        'matching_words': product.matchingWords,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      developer.log('Inserted new product with ID: $id');
+      return id > 0;
+    } catch (e) {
+      developer.log('Error inserting product: $e');
+      return false;
+    }
+  }
 }

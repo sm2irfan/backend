@@ -3,6 +3,8 @@ import 'product.dart';
 import 'editable_product_manager.dart';
 import 'product_image_editor.dart';
 import 'product_validators.dart';
+import 'supabase_product_bloc.dart'; // Add import for Supabase product
+import '../../data/local_database.dart'; // Add import for local database
 
 /// A class to manage adding new products in the product table
 class AddProductManager {
@@ -87,7 +89,7 @@ class AddProductManager {
   }
 
   /// Save the new product
-  void saveNewProduct(BuildContext context) {
+  void saveNewProduct(BuildContext context) async {
     // Prepare values for validation
     String priceValue = editManager.priceController.text.trim();
     if (priceValue.isEmpty) {
@@ -120,8 +122,8 @@ class AddProductManager {
       return;
     }
 
-    // Generate a temporary ID (in a real app, this would come from the database)
-    final int tempId = DateTime.now().millisecondsSinceEpoch;
+    // Use a temporary placeholder ID until the database assigns a real one
+    const int tempId = -1;
     final DateTime now = DateTime.now();
 
     // Create a new product with entered values
@@ -152,23 +154,159 @@ class AddProductManager {
       image: editManager.imageUrlController.text.trim(),
     );
 
-    // Notify parent that a new product has been created
-    onProductCreated(newProduct);
+    // Print the new product details to console for debugging
+    print('New product created: $newProduct');
 
-    // Reset state
-    onStateChanged(() {
-      isAddingNewProduct = false;
-    });
+    try {
+      // Save the product to Supabase and get the updated product with real ID
+      final int dbGeneratedId = await _saveProductToSupabase(
+        context,
+        newProduct,
+      );
 
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('New product added: ${newProduct.name}'),
-        backgroundColor: Colors.green,
-      ),
+      // Create an updated product with the real database ID
+      final updatedProduct = Product(
+        id: dbGeneratedId, // Use the real ID from the database
+        createdAt: newProduct.createdAt,
+        updatedAt: newProduct.updatedAt,
+        name: newProduct.name,
+        uPrices: newProduct.uPrices,
+        description: newProduct.description,
+        discount: newProduct.discount,
+        category1: newProduct.category1,
+        category2: newProduct.category2,
+        popularProduct: newProduct.popularProduct,
+        matchingWords: newProduct.matchingWords,
+        image: newProduct.image,
+      );
+
+      print('Product ID updated from temporary to: $dbGeneratedId');
+
+      // Save the updated product with real ID to local database
+      await _saveProductToLocalDatabase(context, updatedProduct);
+
+      // Notify parent that a new product has been created with real ID
+      onProductCreated(updatedProduct);
+
+      // Reset state
+      onStateChanged(() {
+        isAddingNewProduct = false;
+      });
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('New product added: ${newProduct.name}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (error) {
+      // Show error message if Supabase save failed
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${error.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+
+      // Still notify parent with temporary ID
+      onProductCreated(newProduct);
+
+      // Reset state
+      onStateChanged(() {
+        isAddingNewProduct = false;
+      });
+    }
+  }
+
+  // Save a product to Supabase database and return the generated ID
+  Future<int> _saveProductToSupabase(
+    BuildContext context,
+    Product product,
+  ) async {
+    // Create a Supabase repository
+    final SupabaseProductRepository supabaseRepo = SupabaseProductRepository();
+
+    // Convert Product to SupabaseProduct
+    final supabaseProduct = SupabaseProduct(
+      id: -1, // This will be ignored/replaced by Supabase
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+      name: product.name,
+      uPrices: product.uPrices,
+      description: product.description,
+      discount: product.discount,
+      category1: product.category1,
+      category2: product.category2,
+      popularProduct: product.popularProduct,
+      matchingWords: product.matchingWords,
+      image: product.image,
     );
 
-    // NOTE: In a real app, you would also save to the database here
+    // Create the product in Supabase
+    final createdProduct = await supabaseRepo.createProduct(supabaseProduct);
+
+    // Log the result
+    print(
+      'Product successfully created in Supabase with ID: ${createdProduct.id}',
+    );
+
+    // Show success notification
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Product synced to Supabase: ${product.name}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+
+    // Return the database-generated ID
+    return createdProduct.id;
+  }
+
+  // Save a product to the local database
+  Future<bool> _saveProductToLocalDatabase(
+    BuildContext context,
+    Product product,
+  ) async {
+    try {
+      // Create local database instance
+      final LocalDatabase localDB = LocalDatabase();
+
+      // Use insertProduct instead of updateProduct for new products
+      final success = await localDB.insertProduct(product);
+
+      // Log result
+      if (success) {
+        print(
+          'Product successfully saved to local database with ID: ${product.id}',
+        );
+      } else {
+        print('Failed to save product to local database');
+      }
+
+      return success;
+    } catch (error) {
+      // Log the error
+      print('Error saving product to local database: $error');
+
+      // Show error notification if context is still valid
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save to local database: ${error.toString()}',
+            ),
+            backgroundColor:
+                Colors
+                    .orange, // Use different color to distinguish from Supabase errors
+          ),
+        );
+      }
+
+      return false;
+    }
   }
 
   /// Build a cell for a new product row
