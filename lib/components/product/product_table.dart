@@ -3,7 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async'; // Important for Timer class
 import '../../data/local_database.dart'; // Add this import for local database
-import '../../utils/product_validators.dart';
+import 'product_validators.dart';
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'sync_products_button.dart';

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'product.dart';
 import 'editable_product_manager.dart';
 import 'product_image_editor.dart';
-import '../../utils/product_validators.dart';
+import 'product_validators.dart';
 
 /// A class to manage adding new products in the product table
 class AddProductManager {
