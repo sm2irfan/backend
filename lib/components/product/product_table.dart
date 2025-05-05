@@ -209,22 +209,24 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
       // Get lowercase column name for comparison
       final String columnLower = widget.columnName.toLowerCase();
 
-      // For name filtering, preserve spaces exactly as typed
+      // For name and category1 filtering, preserve spaces exactly as typed
       final String processedValue =
-          columnLower == 'name'
+          (columnLower == 'name' || columnLower == 'category1')
               ? currentText.replaceAll('LIKE:', '') // Only remove LIKE: prefix
               : currentText.trim(); // For other columns, just trim
 
-      // Add special handling for name column to support partial matching
-      if (columnLower == 'name') {
-        print('Adding name filter with LIKE query: "$processedValue"');
+      // Add special handling for name and category1 columns to support partial matching
+      if (columnLower == 'name' || columnLower == 'category1') {
+        print(
+          'Adding ${columnLower} filter with LIKE query: "$processedValue"',
+        );
         productBloc.add(
           FilterProductsByColumn(
             column: columnLower,
             value: processedValue,
             page: 1,
             pageSize: widget.pageSize,
-            filterType: 'like', // Add this parameter for name filtering
+            filterType: 'like', // Use LIKE query for partial matching
           ),
         );
       } else {
@@ -1549,7 +1551,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       activeFilters = state.activeFilters;
     }
 
-    // Add filter input to the ID column (index 0) and the Product name column (index 4)
+    // Add filter input to the ID column (index 0), the Product name column (index 4), and Category 1 column (index 8)
     Widget? filterWidget;
     if (index == 0) {
       filterWidget = ColumnFilterInput(
@@ -1567,6 +1569,16 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         width: 120, // Larger width for product name filter
         height: 30, // Adjust height if needed
         hintText: "Search by name", // Custom hint text
+      );
+    } else if (index == 8) {
+      filterWidget = ColumnFilterInput(
+        columnName: 'category1',
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
+        width: 100, // Width for category filter
+        height: 30, // Adjust height if needed
+        hintText: "Filter category", // Custom hint text
       );
     }
 

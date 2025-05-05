@@ -297,7 +297,7 @@ Then restart the application.
     }
   }
 
-  // Updated to support filtering with comma-separated IDs and LIKE queries for name
+  // Updated to support filtering with comma-separated IDs and LIKE queries for name and category1
   Future<Map<String, dynamic>> getLocalPaginatedProducts(
     int page,
     int pageSize, {
@@ -410,6 +410,29 @@ Then restart the application.
               conditions.add('name = ?');
               queryArgs.add(nameFilter);
               developer.log('Added exact match query for name: $nameFilter');
+            }
+          }
+        }
+
+        // Handle category1 filter with LIKE query support
+        if (filters.containsKey('category1')) {
+          final String categoryFilter = filters['category1']!.trim();
+
+          if (categoryFilter.isNotEmpty) {
+            // Check if the value starts with the LIKE: prefix
+            if (categoryFilter.startsWith('LIKE:')) {
+              // Extract the actual search term
+              final String searchTerm = categoryFilter.substring(5).trim();
+              conditions.add('category_1 LIKE ?');
+              queryArgs.add('%$searchTerm%');
+              developer.log('Added LIKE query for category1: %$searchTerm%');
+            } else {
+              // Use LIKE query for category1 regardless (for partial matching)
+              conditions.add('category_1 LIKE ?');
+              queryArgs.add('%$categoryFilter%');
+              developer.log(
+                'Added LIKE query for category1: %$categoryFilter%',
+              );
             }
           }
         }
