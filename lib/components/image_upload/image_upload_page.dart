@@ -27,6 +27,11 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
   String? _uploadedImageUrl;
   bool _isDragging = false;
 
+  // New state variables for file listing
+  List<FileObject> _bucketFiles = [];
+  bool _isLoadingFiles = false;
+  String _fileListMessage = '';
+
   final _supabase = Supabase.instance.client;
 
   bool get _isDesktop => !kIsWeb && !Platform.isIOS && !Platform.isAndroid;
@@ -36,10 +41,125 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
       TextEditingController(); // Add controller for filename input
 
   @override
+  void initState() {
+    super.initState();
+    // Load files when the page initializes
+    _fetchBucketFiles();
+  }
+
+  @override
   void dispose() {
     _pathController.dispose();
     _filenameController.dispose(); // Dispose the new controller
     super.dispose();
+  }
+
+  // Modified method to fetch only the most recent files
+  Future<void> _fetchBucketFiles() async {
+    setState(() {
+      _isLoadingFiles = true;
+      _fileListMessage = 'Loading recent files...';
+      _bucketFiles = []; // Reset the list before fetching
+    });
+
+    try {
+      // Get only the most recently updated files
+      final recentFiles = await _fetchRecentFiles();
+
+      setState(() {
+        _bucketFiles = recentFiles;
+        _isLoadingFiles = false;
+        _fileListMessage = 'Found ${recentFiles.length} recent files';
+      });
+
+      print('DEBUG: Fetched ${recentFiles.length} recent files from bucket');
+    } catch (e) {
+      setState(() {
+        _isLoadingFiles = false;
+        _fileListMessage = 'Error loading files: ${e.toString()}';
+      });
+      print('DEBUG: Error fetching files: $e');
+    }
+  }
+
+  // New method to fetch only the most recently updated files
+  Future<List<FileObject>> _fetchRecentFiles() async {
+    try {
+      // Get all files at root level since sorting parameters aren't available
+      final allFiles = await _supabase.storage
+          .from('product_image')
+          .list(path: '');
+
+      // Sort files manually based on lastModified or other metadata
+      // Note: If lastModified isn't available, we may need to fall back to alphabetical sorting
+      if (allFiles.isNotEmpty &&
+          allFiles[0].metadata != null &&
+          allFiles[0].metadata!['lastModified'] != null) {
+        // Sort by lastModified if available
+        allFiles.sort((a, b) {
+          final aTime = a.metadata?['lastModified'];
+          final bTime = b.metadata?['lastModified'];
+          if (aTime == null || bTime == null) return 0;
+          return bTime.compareTo(aTime); // Descending order (newest first)
+        });
+      } else {
+        // Fallback to sorting by name
+        allFiles.sort((a, b) => a.name.compareTo(b.name));
+      }
+
+      // Return only the first 10 files (or fewer if there aren't 10)
+      final recentFiles = allFiles.take(10).toList();
+
+      print(
+        'DEBUG: Successfully fetched and sorted ${recentFiles.length} recent files',
+      );
+      return recentFiles;
+    } catch (e) {
+      print('DEBUG: Error in _fetchRecentFiles: $e');
+      // Return empty list on error
+      return [];
+    }
+  }
+
+  // Modified method to delete a file from the bucket with confirmation
+  Future<void> _deleteFile(String filePath) async {
+    // Show confirmation dialog first
+    final bool confirmDelete =
+        await showDialog(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Confirm Deletion'),
+                content: Text('Are you sure you want to delete "$filePath"?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+        ) ??
+        false; // Default to false if dialog is dismissed
+
+    // Only proceed if user confirmed
+    if (confirmDelete) {
+      try {
+        await _supabase.storage.from('product_image').remove([filePath]);
+        _fetchBucketFiles(); // Refresh list after delete
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Deleted $filePath')));
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting file: ${e.toString()}')),
+        );
+      }
+    }
   }
 
   // Add a helper method for platform-specific path formatting
@@ -350,6 +470,10 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
         _selectedImageBytes = null;
         _selectedImageName = null;
       });
+
+      // Refresh the file list after a successful upload
+      _fetchBucketFiles();
+
       print('DEBUG: State updated after successful upload');
     } catch (e) {
       print('DEBUG: Exception in _uploadImage: $e');
@@ -359,6 +483,18 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
         _message = 'Upload failed: ${e.toString()}';
       });
     }
+  }
+
+  // New method to copy URL to clipboard
+  void _copyUrlToClipboard(String fileName) {
+    final url = _supabase.storage.from('product_image').getPublicUrl(fileName);
+    Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('URL copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -381,10 +517,13 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
       ),
       body: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
+          constraints: const BoxConstraints(
+            maxWidth: 800,
+          ), // Increased width for file list
           padding: const EdgeInsets.all(20),
           child: SingleChildScrollView(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Desktop Image Upload',
@@ -575,6 +714,80 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 40),
+
+                // File listing section
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Bucket Files',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Text(_fileListMessage),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: _isLoadingFiles ? null : _fetchBucketFiles,
+                          tooltip: 'Refresh file list',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // Simple file list - filenames only
+                _isLoadingFiles
+                    ? const Center(child: CircularProgressIndicator())
+                    : _bucketFiles.isEmpty
+                    ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('No files found in bucket'),
+                      ),
+                    )
+                    : ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _bucketFiles.length,
+                      separatorBuilder:
+                          (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final file = _bucketFiles[index];
+                        return ListTile(
+                          leading: const Icon(Icons.insert_drive_file),
+                          title: Text(file.name),
+                          subtitle: Text(
+                            '${(file.metadata?['size'] ?? 0) / 1024} KB',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.copy),
+                                tooltip: 'Copy URL',
+                                onPressed: () => _copyUrlToClipboard(file.name),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                tooltip: 'Delete file',
+                                onPressed: () => _deleteFile(file.name),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
               ],
             ),
           ),
