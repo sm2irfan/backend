@@ -11,6 +11,7 @@ import 'product_image_editor.dart';
 import 'product_filters.dart'; // Import the new filters file
 import 'supabase_product_bloc.dart'; // Add import for Supabase product bloc
 import 'add_product_manager.dart'; // Add this import for AddProductManager
+import 'column_visibility_manager.dart'; // Add this import for column visibility
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -647,6 +648,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   // Table configuration based on screen size
   late ProductTableConfig _tableConfig;
 
+  // Column visibility manager
+  late ColumnVisibilityManager _columnVisibilityManager;
+
   // Column titles
   final List<String> _titles = [
     'ID',
@@ -669,6 +673,16 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     super.initState();
     _tableConfig = DesktopTableConfig(); // Default to desktop
     _initializeColumnWidths();
+
+    // Initialize the column visibility manager
+    _columnVisibilityManager = ColumnVisibilityManager(
+      columnTitles: _titles,
+      prefsKey:
+          'product_table_column_visibility', // Optional: persist preferences
+    );
+
+    // Load any saved column visibility preferences
+    _columnVisibilityManager.loadSavedPreferences();
 
     // Initialize the AddProductManager with onStateChanged parameter
     _addProductManager = AddProductManager(
@@ -752,26 +766,36 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
           ),
           const Divider(height: 1),
 
-          // Always show the header table with filters
+          // Add chips for hidden columns
+          _columnVisibilityManager.buildHiddenColumnsSection(
+            context,
+            (columnIndex) => setState(() {
+              _columnVisibilityManager.toggleColumnVisibility(columnIndex);
+            }),
+          ),
+
+          const Divider(height: 1),
+
+          // Header table with filters and column hide options
           Table(
             border: TableBorder.all(color: Colors.grey.shade300),
-            columnWidths: _columnWidths.asMap().map(
-              (i, w) => MapEntry(i, FixedColumnWidth(w)),
+            columnWidths: _columnVisibilityManager.getVisibleColumnWidths(
+              _columnWidths,
             ),
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
-              TableRow(
+              _columnVisibilityManager.buildTableRow(
                 decoration: BoxDecoration(color: Colors.blueGrey.shade100),
-                children: List.generate(_titles.length, (i) {
-                  return _buildColumnHeader(
-                    _titles[i],
-                    i,
-                    _tableConfig.getTextStyle().copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: _isMobileView ? 11.0 : 13.0,
+                allColumnIndices: List.generate(_titles.length, (i) => i),
+                cellBuilder:
+                    (i) => _buildColumnHeader(
+                      _titles[i],
+                      i,
+                      _tableConfig.getTextStyle().copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: _isMobileView ? 11.0 : 13.0,
+                      ),
                     ),
-                  );
-                }),
               ),
             ],
           ),
@@ -833,55 +857,55 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     );
   }
 
-  // Modify the _buildTableWithNewRow method
+  // Modify the _buildTableWithNewRow method to use the column visibility manager
   Widget _buildTableWithNewRow() {
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300),
-      columnWidths: _columnWidths.asMap().map(
-        (i, w) => MapEntry(i, FixedColumnWidth(w)),
+      columnWidths: _columnVisibilityManager.getVisibleColumnWidths(
+        _columnWidths,
       ),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
-        // Add new product row at the top if in add mode
+        // Add new product row if in add mode
         if (_addProductManager.isAddingNewProduct)
-          TableRow(
+          _columnVisibilityManager.buildTableRow(
             decoration: const BoxDecoration(color: Colors.white),
-            children: List.generate(_columnWidths.length, (i) {
-              return SizedBox(
-                height: _rowHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8.0,
-                    vertical: 12.0,
-                  ),
-                  child: _addProductManager.buildNewProductCell(
-                    context,
-                    i,
-                    _tableConfig.getTextStyle(),
+            allColumnIndices: List.generate(_columnWidths.length, (i) => i),
+            cellBuilder:
+                (i) => SizedBox(
+                  height: _rowHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8.0,
+                      vertical: 12.0,
+                    ),
+                    child: _addProductManager.buildNewProductCell(
+                      context,
+                      i, // Use original column index
+                      _tableConfig.getTextStyle(),
+                    ),
                   ),
                 ),
-              );
-            }),
           ),
 
         // Existing products
         for (int index = 0; index < widget.products.length; index++)
-          TableRow(
+          _columnVisibilityManager.buildTableRow(
             decoration: BoxDecoration(
               color: _getRowColor(widget.products[index].id),
             ),
-            children: List.generate(_columnWidths.length, (i) {
-              return SizedBox(
-                height: _rowHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8.0,
-                    vertical: 12.0,
+            allColumnIndices: List.generate(_columnWidths.length, (i) => i),
+            cellBuilder:
+                (i) => SizedBox(
+                  height: _rowHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8.0,
+                      vertical: 12.0,
+                    ),
+                    child: _buildCell(widget.products[index], i, _isMobileView),
                   ),
-                  child: _buildCell(widget.products[index], i, _isMobileView),
                 ),
-              );
-            }),
           ),
       ],
     );
@@ -1592,11 +1616,25 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SelectableText(title, style: style),
+              // Use the visibility manager to build header with hide option
+              _columnVisibilityManager.buildColumnHeaderWithVisibilityToggle(
+                title: title,
+                index: index,
+                style: style,
+                onToggle:
+                    (columnIndex) => setState(() {
+                      _columnVisibilityManager.toggleColumnVisibility(
+                        columnIndex,
+                      );
+                    }),
+                filterWidget: filterWidget,
+              ),
               if (filterWidget != null) filterWidget,
             ],
           ),
         ),
+
+        // Keep existing resize handlers
         Positioned(
           right: 0,
           top: 0,
