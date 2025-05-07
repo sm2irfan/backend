@@ -3,197 +3,170 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Manages the visibility of table columns
 class ColumnVisibilityManager {
-  /// Set of hidden column indices
-  final Set<int> hiddenColumns = {};
-
   /// Column titles for reference
   final List<String> columnTitles;
 
   /// Optional key for storing preferences
   final String? prefsKey;
 
+  final Set<int> _hiddenColumns = <int>{};
+
   /// Create a new column visibility manager
   ColumnVisibilityManager({required this.columnTitles, this.prefsKey});
 
-  /// Initialize from saved preferences if available
-  Future<void> loadSavedPreferences() async {
-    if (prefsKey == null) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final List<String>? savedIndices = prefs.getStringList(prefsKey!);
-
-    if (savedIndices != null) {
-      hiddenColumns.clear();
-      for (String indexStr in savedIndices) {
-        final index = int.tryParse(indexStr);
-        if (index != null) {
-          hiddenColumns.add(index);
-        }
-      }
-    }
-  }
-
-  /// Save current preferences if key is provided
-  Future<void> savePreferences() async {
-    if (prefsKey == null) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> indices =
-        hiddenColumns.map((i) => i.toString()).toList();
-    await prefs.setStringList(prefsKey!, indices);
-  }
+  /// Check if a column is visible
+  bool isColumnVisible(int columnIndex) =>
+      !_hiddenColumns.contains(columnIndex);
 
   /// Toggle the visibility of a column
   void toggleColumnVisibility(int columnIndex) {
-    if (hiddenColumns.contains(columnIndex)) {
-      hiddenColumns.remove(columnIndex);
+    if (_hiddenColumns.contains(columnIndex)) {
+      _hiddenColumns.remove(columnIndex);
     } else {
-      hiddenColumns.add(columnIndex);
+      _hiddenColumns.add(columnIndex);
     }
-
-    savePreferences();
+    if (prefsKey != null) {
+      _savePreferences();
+    }
   }
 
-  /// Reset all columns to visible
-  void resetToDefaults() {
-    hiddenColumns.clear();
-    savePreferences();
+  /// Get list of visible columns
+  List<int> getVisibleColumnIndices() {
+    return List.generate(
+      columnTitles.length,
+      (i) => i,
+    ).where((i) => isColumnVisible(i)).toList();
   }
 
-  /// Get visible column widths, mapping from the visible index to the original column width
+  /// Get visible column widths
   Map<int, TableColumnWidth> getVisibleColumnWidths(
     List<double> allColumnWidths,
   ) {
-    final visibleWidths = <int, TableColumnWidth>{};
+    final Map<int, TableColumnWidth> visibleWidths = {};
     int visibleIndex = 0;
 
-    for (
-      int originalIndex = 0;
-      originalIndex < allColumnWidths.length;
-      originalIndex++
-    ) {
-      if (!hiddenColumns.contains(originalIndex)) {
-        visibleWidths[visibleIndex] = FixedColumnWidth(
-          allColumnWidths[originalIndex],
-        );
-        visibleIndex++;
+    for (int i = 0; i < allColumnWidths.length; i++) {
+      if (isColumnVisible(i)) {
+        visibleWidths[visibleIndex++] = FixedColumnWidth(allColumnWidths[i]);
       }
     }
 
     return visibleWidths;
   }
 
-  /// Convert a visible column index to its original index
-  int getOriginalColumnIndex(int visibleIndex) {
-    int originalIndex = 0;
-    int currentVisibleIndex = 0;
-
-    while (currentVisibleIndex <= visibleIndex &&
-        originalIndex < columnTitles.length) {
-      if (!hiddenColumns.contains(originalIndex)) {
-        if (currentVisibleIndex == visibleIndex) {
-          return originalIndex;
-        }
-        currentVisibleIndex++;
-      }
-      originalIndex++;
-    }
-
-    return originalIndex;
-  }
-
-  /// Get widgets for visible columns
-  List<Widget> getVisibleCells(
-    int rowIndex,
-    List<int> allColumnIndices,
-    Widget Function(int rowIndex, int originalColumnIndex) cellBuilder,
-  ) {
-    final visibleCells = <Widget>[];
-
-    for (int originalIndex in allColumnIndices) {
-      if (!hiddenColumns.contains(originalIndex)) {
-        visibleCells.add(cellBuilder(rowIndex, originalIndex));
-      }
-    }
-
-    return visibleCells;
-  }
-
-  /// Build a table row with just the visible columns
+  /// Create TableRow with only visible cells
   TableRow buildTableRow({
     required BoxDecoration decoration,
     required List<int> allColumnIndices,
-    required Widget Function(int columnIndex) cellBuilder,
+    required Widget Function(int) cellBuilder,
   }) {
-    return TableRow(
-      decoration: decoration,
-      children:
-          allColumnIndices
-              .where((i) => !hiddenColumns.contains(i))
-              .map((i) => cellBuilder(i))
-              .toList(),
-    );
+    List<Widget> cells = [];
+
+    for (int i in allColumnIndices) {
+      if (isColumnVisible(i)) {
+        cells.add(cellBuilder(i));
+      }
+    }
+
+    return TableRow(decoration: decoration, children: cells);
   }
 
-  /// Build a "show column" chip for a hidden column
-  Widget buildColumnChip(int columnIndex, Function(int) onToggle) {
-    return FilterChip(
-      label: Text('Show ${columnTitles[columnIndex]}'),
-      onSelected: (_) => onToggle(columnIndex),
-      deleteIcon: const Icon(Icons.visibility, size: 18),
-      onDeleted: () => onToggle(columnIndex),
-      backgroundColor: Colors.blue.shade100,
-      labelStyle: const TextStyle(fontSize: 12),
-    );
-  }
-
-  /// Build the hidden columns chip section
-  Widget buildHiddenColumnsSection(
-    BuildContext context,
-    Function(int) onToggle,
-  ) {
-    if (hiddenColumns.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      child: Wrap(
-        spacing: 8.0,
-        runSpacing: 4.0,
-        children:
-            hiddenColumns.map((columnIndex) {
-              return buildColumnChip(columnIndex, onToggle);
-            }).toList(),
-      ),
-    );
-  }
-
-  /// Build a column header with visibility toggle
+  /// Build column header with visibility toggle option
   Widget buildColumnHeaderWithVisibilityToggle({
     required String title,
     required int index,
     required TextStyle style,
     required Function(int) onToggle,
-    required Widget? filterWidget,
+    Widget? filterWidget,
   }) {
-    // Exclude certain columns from having the hide option
-    bool canHide =
-        index !=
-        (columnTitles.length -
-            1); // Don't allow hiding the last column (actions)
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(child: Text(title, style: style)),
-        if (canHide)
-          Tooltip(
-            message: 'Hide column',
-            child: InkWell(
-              onTap: () => onToggle(index),
-              child: const Icon(Icons.visibility_off, size: 16),
+        Expanded(
+          child: Text(title, style: style, overflow: TextOverflow.ellipsis),
+        ),
+        GestureDetector(
+          onTap: () => onToggle(index),
+          child: Tooltip(
+            message: "Hide column",
+            child: const Icon(
+              Icons.visibility_off,
+              size: 16,
+              color: Colors.grey,
             ),
           ),
+        ),
       ],
     );
+  }
+
+  /// Build chips section for hidden columns
+  Widget buildHiddenColumnsSection(
+    BuildContext context,
+    Function(int) onShowColumn,
+  ) {
+    if (_hiddenColumns.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Wrap(
+        spacing: 8.0,
+        runSpacing: 4.0,
+        children:
+            _hiddenColumns.map((index) {
+              return InputChip(
+                label: Text(
+                  columnTitles[index],
+                  style: const TextStyle(fontSize: 12),
+                ),
+                onPressed: () => onShowColumn(index),
+                deleteIcon: const Icon(Icons.visibility, size: 16),
+                onDeleted: () => onShowColumn(index),
+                backgroundColor: Theme.of(
+                  context,
+                ).primaryColor.withOpacity(0.1),
+                deleteIconColor: Theme.of(context).primaryColor,
+              );
+            }).toList(),
+      ),
+    );
+  }
+
+  /// Load saved preferences
+  Future<void> loadSavedPreferences() async {
+    if (prefsKey == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String>? hiddenIndices = prefs.getStringList(prefsKey!);
+
+      if (hiddenIndices != null) {
+        _hiddenColumns.clear();
+        _hiddenColumns.addAll(
+          hiddenIndices
+              .map((s) => int.tryParse(s) ?? -1)
+              .where((i) => i >= 0 && i < columnTitles.length),
+        );
+      }
+    } catch (e) {
+      print('Error loading column visibility preferences: $e');
+    }
+  }
+
+  /// Save preferences
+  Future<void> _savePreferences() async {
+    if (prefsKey == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        prefsKey!,
+        _hiddenColumns.map((i) => i.toString()).toList(),
+      );
+    } catch (e) {
+      print('Error saving column visibility preferences: $e');
+    }
   }
 }
