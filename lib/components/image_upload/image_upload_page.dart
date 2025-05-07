@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Add this import for clipboard functionality
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +10,7 @@ import 'package:path/path.dart' as path;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
 import '../../components/common/app_drawer.dart';
+import '../../main.dart'; // Import for AppRoutes constants
 
 class ImageUploadPage extends StatefulWidget {
   const ImageUploadPage({super.key});
@@ -374,9 +375,8 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
       drawer: AppDrawer(
         currentPage: 'Image Upload',
         onPageSelected: (page) {
-          if (page != 'Image Upload') {
-            Navigator.pushReplacementNamed(context, '/${page.toLowerCase()}');
-          }
+          // The actual navigation is now handled in AppDrawer directly
+          // We just need to set the current page state
         },
       ),
       body: Center(

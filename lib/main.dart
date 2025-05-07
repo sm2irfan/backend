@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'components/image_upload/image_upload_page.dart';
-import 'components/product/product.dart';
+import 'components/product/product_ui.dart'; // Import ProductUI instead of product.dart
 import 'components/auth/login_page.dart';
 import 'data/local_database.dart';
+
+// Define route names as constants for consistency
+class AppRoutes {
+  static const String home = '/';
+  static const String products = '/products';
+  static const String imageUpload = '/image_upload';
+  static const String login = '/login';
+}
 
 void main() async {
   // Ensure Flutter is initialized
@@ -19,27 +27,53 @@ void main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxoeXRhaXJnbm9qcHpnYmdqaG9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE1MDI4MjYsImV4cCI6MjA1NzA3ODgyNn0.uDxpy6lcB4STumSknuDmrjwZDuSekcY4i1A07nHCQdM',
   );
 
-  runApp(MyApp());
+  runApp(AppRoot());
 }
 
-class MyApp extends StatelessWidget {
-  // Remove "const" to avoid rebuild issues
-  MyApp({super.key});
+class AppRoot extends StatelessWidget {
+  const AppRoot({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Product App',
+      title: 'Product Management App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
+        appBarTheme: const AppBarTheme(
+          elevation: 1,
+          centerTitle: false,
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+        ),
       ),
       debugShowCheckedModeBanner: false,
-      initialRoute: '/login',
+
+      // Single root navigator and no nested navigators
+      initialRoute: AppRoutes.home,
+
       routes: {
-        '/login': (context) => const LoginPage(),
-        '/home': (context) => const ProductApp(),
-        '/image-upload': (context) => const ImageUploadPage(),
+        AppRoutes.home: (context) => const ProductDashboard(),
+        AppRoutes.products: (context) => const ProductDashboard(),
+        AppRoutes.imageUpload: (context) => const ImageUploadPage(),
+        AppRoutes.login: (context) => const LoginPage(),
+      },
+
+      // Handle any named routes that might not be defined
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case AppRoutes.products:
+            return MaterialPageRoute(builder: (_) => const ProductDashboard());
+          case AppRoutes.imageUpload:
+            return MaterialPageRoute(builder: (_) => const ImageUploadPage());
+          default:
+            return MaterialPageRoute(builder: (_) => const ProductDashboard());
+        }
+      },
+
+      // Fallback route
+      onUnknownRoute: (_) {
+        return MaterialPageRoute(builder: (_) => const ProductDashboard());
       },
     );
   }

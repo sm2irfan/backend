@@ -1,33 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'product.dart';
-import 'product_table.dart'; // Import the new file
-import '../common/app_drawer.dart'; // Import the new drawer component
+import 'product_table.dart';
+import '../common/app_drawer.dart';
 
-// Main admin app for product management
-class ProductApp extends StatelessWidget {
-  const ProductApp({super.key});
+// Convert from nested MaterialApp to a direct dashboard component
+class ProductDashboard extends StatelessWidget {
+  const ProductDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Product Management',
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        appBarTheme: const AppBarTheme(
-          elevation: 1,
-          centerTitle: false,
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(foregroundColor: Colors.white),
-        ),
-      ),
-      debugShowCheckedModeBanner: false,
-      home: const SimpleAdminDashboard(),
-    );
+    return const SimpleAdminDashboard();
   }
 }
 

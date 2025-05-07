@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../image_upload/image_upload_page.dart';
+import '../../main.dart'; // Import for AppRoutes constants
 
 class AppDrawer extends StatelessWidget {
   final String currentPage;
@@ -55,6 +55,12 @@ class AppDrawer extends StatelessWidget {
             onTap: () {
               onPageSelected('Dashboard');
               Navigator.pop(context);
+              // Use pushNamedAndRemoveUntil to avoid empty history issues
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.home,
+                (_) => false, // Clear the entire stack
+              );
             },
           ),
           _buildNavItem(
@@ -65,6 +71,12 @@ class AppDrawer extends StatelessWidget {
             onTap: () {
               onPageSelected('Products');
               Navigator.pop(context);
+              // Use pushNamedAndRemoveUntil to avoid empty history issues
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.products,
+                (_) => false, // Clear the entire stack
+              );
             },
           ),
           _buildNavItem(
@@ -75,11 +87,11 @@ class AppDrawer extends StatelessWidget {
             onTap: () {
               onPageSelected('Image Upload');
               Navigator.pop(context);
-              Navigator.push(
+              // Use pushNamedAndRemoveUntil to avoid empty history issues
+              Navigator.pushNamedAndRemoveUntil(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const ImageUploadPage(),
-                ),
+                AppRoutes.imageUpload,
+                (_) => false, // Clear the entire stack
               );
             },
           ),
