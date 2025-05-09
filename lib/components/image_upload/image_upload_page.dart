@@ -54,71 +54,102 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
     super.dispose();
   }
 
-  // Modified method to fetch only the most recent files
+  // Modified method to fetch files with better error handling and logging
   Future<void> _fetchBucketFiles() async {
     setState(() {
       _isLoadingFiles = true;
-      _fileListMessage = 'Loading recent files...';
-      _bucketFiles = []; // Reset the list before fetching
+      _fileListMessage = 'Loading files...';
+      _bucketFiles = [];
     });
 
     try {
-      // Get only the most recently updated files
+      print('DEBUG: Starting file fetch operation from bucket product_image');
       final recentFiles = await _fetchRecentFiles();
 
       setState(() {
         _bucketFiles = recentFiles;
         _isLoadingFiles = false;
-        _fileListMessage = 'Found ${recentFiles.length} recent files';
+
+        // Update the message to indicate the API limitation if we got exactly 100 files
+        // (which suggests there might be more that we can't fetch)
+        if (recentFiles.length == 100) {
+          _fileListMessage = 'Showing first 100 files (API limit)';
+        } else {
+          _fileListMessage = 'Found ${recentFiles.length} files';
+        }
       });
 
-      print('DEBUG: Fetched ${recentFiles.length} recent files from bucket');
+      print('DEBUG: Fetched ${recentFiles.length} files from bucket');
+
+      // Print the names of files to help with debugging
+      if (recentFiles.isNotEmpty) {
+        print(
+          'DEBUG: First few files: ${recentFiles.take(3).map((f) => f.name).join(", ")}',
+        );
+      } else {
+        print('DEBUG: No files found in the bucket');
+      }
     } catch (e) {
+      print('DEBUG: Error in _fetchBucketFiles: $e');
+      print('DEBUG: Stack trace: ${StackTrace.current}');
       setState(() {
         _isLoadingFiles = false;
-        _fileListMessage = 'Error loading files: ${e.toString()}';
+        _fileListMessage = 'Error: ${e.toString()}';
       });
-      print('DEBUG: Error fetching files: $e');
     }
   }
 
-  // New method to fetch only the most recently updated files
+  // Improved method to fetch files with acknowledgment of API limits
   Future<List<FileObject>> _fetchRecentFiles() async {
     try {
-      // Get all files at root level since sorting parameters aren't available
+      print('DEBUG: Starting fetch from Supabase storage');
+
+      // Note: Supabase Storage API typically limits to 100 files per request
+      // and the current SDK version doesn't support proper pagination
+      print(
+        'DEBUG: Fetching files from root directory (limited to ~100 by API)',
+      );
+
       final allFiles = await _supabase.storage
           .from('product_image')
           .list(path: '');
 
-      // Sort files manually based on lastModified or other metadata
-      // Note: If lastModified isn't available, we may need to fall back to alphabetical sorting
-      if (allFiles.isNotEmpty &&
-          allFiles[0].metadata != null &&
-          allFiles[0].metadata!['lastModified'] != null) {
-        // Sort by lastModified if available
-        allFiles.sort((a, b) {
-          final aTime = a.metadata?['lastModified'];
-          final bTime = b.metadata?['lastModified'];
-          if (aTime == null || bTime == null) return 0;
-          return bTime.compareTo(aTime); // Descending order (newest first)
-        });
-      } else {
-        // Fallback to sorting by name
-        allFiles.sort((a, b) => a.name.compareTo(b.name));
+      print(
+        'DEBUG: Retrieved ${allFiles.length} files (maximum 100 due to API limitations)',
+      );
+
+      // Sort the files to show most recent first
+      if (allFiles.isNotEmpty) {
+        if (allFiles[0].metadata != null &&
+            allFiles[0].metadata!['lastModified'] != null) {
+          print('DEBUG: Using lastModified for sorting');
+          allFiles.sort((a, b) {
+            final aTime = a.metadata?['lastModified'];
+            final bTime = b.metadata?['lastModified'];
+            if (aTime == null || bTime == null) return 0;
+            return bTime.compareTo(aTime); // Descending order (newest first)
+          });
+        } else {
+          print('DEBUG: lastModified not available, using name for sorting');
+          allFiles.sort(
+            (a, b) => b.name.compareTo(a.name),
+          ); // Reverse alphabetical as a fallback
+        }
       }
 
-      // Return only the first 10 files (or fewer if there aren't 10)
-      final recentFiles = allFiles.take(10).toList();
-
-      print(
-        'DEBUG: Successfully fetched and sorted ${recentFiles.length} recent files',
-      );
-      return recentFiles;
+      print('DEBUG: Returning ${allFiles.length} sorted files');
+      return allFiles;
     } catch (e) {
       print('DEBUG: Error in _fetchRecentFiles: $e');
-      // Return empty list on error
-      return [];
+      print('DEBUG: Stack trace: ${StackTrace.current}');
+      rethrow;
     }
+  }
+
+  // Add a method to manually refresh the file list
+  void _refreshFileList() {
+    print('DEBUG: Manual refresh requested');
+    _fetchBucketFiles();
   }
 
   // Modified method to delete a file from the bucket with confirmation
@@ -501,294 +532,648 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
   Widget build(BuildContext context) {
     if (!_isDesktop) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Image Upload')),
+        appBar: AppBar(title: const Text('Image Upload'), elevation: 0),
         body: const Center(child: Text('Desktop feature only')),
       );
     }
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Image Upload')),
+      appBar: AppBar(
+        title: const Text('Image Upload'),
+        elevation: 0,
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+      ),
       drawer: AppDrawer(
         currentPage: 'Image Upload',
         onPageSelected: (page) {
           // The actual navigation is now handled in AppDrawer directly
-          // We just need to set the current page state
         },
       ),
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(
-            maxWidth: 800,
-          ), // Increased width for file list
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Desktop Image Upload',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 30),
-                DropTarget(
-                  onDragDone: (details) async {
-                    if (details.files.isNotEmpty) {
-                      await _handleDroppedFile(details.files.first);
-                    }
-                  },
-                  onDragEntered: (_) => setState(() => _isDragging = true),
-                  onDragExited: (_) => setState(() => _isDragging = false),
-                  child: Container(
-                    height: 300,
-                    decoration: BoxDecoration(
-                      color:
-                          _isDragging ? Colors.blue.shade100 : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: _isDragging ? Colors.blue : Colors.grey,
-                        width: _isDragging ? 2 : 1,
-                      ),
-                    ),
-                    child:
-                        _selectedImageBytes != null
-                            ? Image.memory(
-                              _selectedImageBytes!,
-                              fit: BoxFit.contain,
-                            )
-                            : _uploadedImageUrl != null
-                            ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 50,
-                                ),
-                                const SizedBox(height: 10),
-                                const Text('Upload Complete!'),
-                                TextButton(
-                                  child: const Text('View URL'),
-                                  onPressed:
-                                      () => setState(
-                                        () =>
-                                            _message =
-                                                'URL: $_uploadedImageUrl',
-                                      ),
-                                ),
-                              ],
-                            )
-                            : Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.cloud_upload,
-                                  size: 80,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Drag & Drop Image Here',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey[700],
-                                  ),
-                                ),
-                              ],
-                            ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Add filename input field after the drop area
-                TextField(
-                  controller: _filenameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Custom Filename (optional)',
-                    hintText: 'Enter desired filename for upload',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.drive_file_rename_outline),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Show the manual path input for both Linux and Windows
-                if (Platform.isLinux || Platform.isWindows)
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [colorScheme.surface, colorScheme.surface.withOpacity(0.7)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 900),
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Page Title with modern styling
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.only(bottom: 24),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _pathController,
-                            decoration: InputDecoration(
-                              labelText: 'Image File Path',
-                              hintText:
-                                  Platform.isWindows
-                                      ? 'C:\\Users\\username\\Pictures\\image.jpg'
-                                      : '/path/to/image.jpg',
-                              border: const OutlineInputBorder(),
-                            ),
-                          ),
+                        Icon(
+                          Icons.cloud_upload_rounded,
+                          size: 32,
+                          color: colorScheme.primary,
                         ),
-                        const SizedBox(width: 10),
-                        ElevatedButton(
-                          onPressed:
-                              () => _loadFileFromPath(
-                                _pathController.text.trim(),
-                              ),
-                          child: const Text('Load'),
+                        const SizedBox(width: 16),
+                        Text(
+                          'Desktop Image Upload',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                            letterSpacing: -0.5,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                if (_message.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color:
-                          _message.contains('fail')
-                              ? Colors.red[100]
-                              : Colors.green[100],
-                      borderRadius: BorderRadius.circular(5),
+
+                  // Upload Area Card
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child:
-                        _message.startsWith('URL:')
-                            ? Row(
-                              children: [
-                                Expanded(
-                                  child: SelectableText(
-                                    _message,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Section Title
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(
+                              'Upload New Image',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ),
+
+                          // Drop Target Area with improved styling
+                          DropTarget(
+                            onDragDone: (details) async {
+                              if (details.files.isNotEmpty) {
+                                await _handleDroppedFile(details.files.first);
+                              }
+                            },
+                            onDragEntered:
+                                (_) => setState(() => _isDragging = true),
+                            onDragExited:
+                                (_) => setState(() => _isDragging = false),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              height: 300,
+                              decoration: BoxDecoration(
+                                color:
+                                    _isDragging
+                                        ? colorScheme.primaryContainer
+                                        : colorScheme.surfaceVariant
+                                            .withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color:
+                                      _isDragging
+                                          ? colorScheme.primary
+                                          : colorScheme.outlineVariant,
+                                  width: _isDragging ? 2 : 1,
+                                ),
+                                boxShadow:
+                                    _isDragging
+                                        ? [
+                                          BoxShadow(
+                                            color: colorScheme.primary
+                                                .withOpacity(0.3),
+                                            blurRadius: 8,
+                                            spreadRadius: 2,
+                                          ),
+                                        ]
+                                        : null,
+                              ),
+                              child:
+                                  _selectedImageBytes != null
+                                      ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(11),
+                                        child: Image.memory(
+                                          _selectedImageBytes!,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      )
+                                      : _uploadedImageUrl != null
+                                      ? Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: colorScheme.primary,
+                                            size: 64,
+                                          ),
+                                          const SizedBox(height: 16),
+                                          const Text(
+                                            'Upload Complete!',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextButton.icon(
+                                            icon: const Icon(Icons.link),
+                                            label: const Text('View URL'),
+                                            onPressed:
+                                                () => setState(
+                                                  () =>
+                                                      _message =
+                                                          'URL: $_uploadedImageUrl',
+                                                ),
+                                          ),
+                                        ],
+                                      )
+                                      : Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.cloud_upload_rounded,
+                                            size: 80,
+                                            color: colorScheme.primary
+                                                .withOpacity(0.7),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'Drag & Drop Image Here',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w500,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'or use the select button below',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: colorScheme
+                                                  .onSurfaceVariant
+                                                  .withOpacity(0.7),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Filename input with improved styling
+                          TextField(
+                            controller: _filenameController,
+                            decoration: InputDecoration(
+                              labelText: 'Custom Filename (optional)',
+                              hintText: 'Enter desired filename for upload',
+                              prefixIcon: const Icon(
+                                Icons.drive_file_rename_outline,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: colorScheme.surfaceVariant.withOpacity(
+                                0.3,
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Manual path input for Linux/Windows with improved styling
+                          if (Platform.isLinux || Platform.isWindows)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _pathController,
+                                      decoration: InputDecoration(
+                                        labelText: 'Image File Path',
+                                        hintText:
+                                            Platform.isWindows
+                                                ? 'C:\\Users\\username\\Pictures\\image.jpg'
+                                                : '/path/to/image.jpg',
+                                        prefixIcon: const Icon(
+                                          Icons.folder_open,
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        filled: true,
+                                        fillColor: colorScheme.surfaceVariant
+                                            .withOpacity(0.3),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.copy),
-                                  tooltip: 'Copy URL to clipboard',
-                                  onPressed: () {
-                                    final url = _message.substring(
-                                      5,
-                                    ); // Remove "URL: " prefix
-                                    Clipboard.setData(
-                                      ClipboardData(text: url.trim()),
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'URL copied to clipboard',
-                                        ),
-                                        duration: Duration(seconds: 2),
+                                  const SizedBox(width: 16),
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.file_open),
+                                    label: const Text('Load'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 15,
                                       ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            )
-                            : Text(_message),
-                  ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Select Image'),
-                      onPressed: _isLoading ? null : _pickImage,
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      icon:
-                          _isLoading
-                              ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.upload),
-                      label: Text(_isLoading ? 'Uploading...' : 'Upload'),
-                      onPressed:
-                          _isLoading || _selectedImageBytes == null
-                              ? null
-                              : _uploadImage,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-
-                // File listing section
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Bucket Files',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Text(_fileListMessage),
-                        const SizedBox(width: 10),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: _isLoadingFiles ? null : _fetchBucketFiles,
-                          tooltip: 'Refresh file list',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // Simple file list - filenames only
-                _isLoadingFiles
-                    ? const Center(child: CircularProgressIndicator())
-                    : _bucketFiles.isEmpty
-                    ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Text('No files found in bucket'),
-                      ),
-                    )
-                    : ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _bucketFiles.length,
-                      separatorBuilder:
-                          (context, index) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final file = _bucketFiles[index];
-                        return ListTile(
-                          leading: const Icon(Icons.insert_drive_file),
-                          title: Text(file.name),
-                          subtitle: Text(
-                            '${(file.metadata?['size'] ?? 0) / 1024} KB',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.copy),
-                                tooltip: 'Copy URL',
-                                onPressed: () => _copyUrlToClipboard(file.name),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    onPressed:
+                                        () => _loadFileFromPath(
+                                          _pathController.text.trim(),
+                                        ),
+                                  ),
+                                ],
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                tooltip: 'Delete file',
-                                onPressed: () => _deleteFile(file.name),
+                            ),
+
+                          // Status message with improved styling
+                          if (_message.isNotEmpty)
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              margin: const EdgeInsets.only(bottom: 24),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color:
+                                    _message.contains('fail')
+                                        ? colorScheme.errorContainer
+                                        : colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child:
+                                  _message.startsWith('URL:')
+                                      ? Row(
+                                        children: [
+                                          Expanded(
+                                            child: SelectableText(
+                                              _message,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w500,
+                                                color:
+                                                    _message.contains('fail')
+                                                        ? colorScheme
+                                                            .onErrorContainer
+                                                        : colorScheme
+                                                            .onPrimaryContainer,
+                                              ),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.copy,
+                                              color: colorScheme.primary,
+                                            ),
+                                            tooltip: 'Copy URL to clipboard',
+                                            onPressed: () {
+                                              final url = _message.substring(5);
+                                              Clipboard.setData(
+                                                ClipboardData(text: url.trim()),
+                                              );
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: const Text(
+                                                    'URL copied to clipboard',
+                                                  ),
+                                                  backgroundColor:
+                                                      colorScheme
+                                                          .inverseSurface,
+                                                  duration: const Duration(
+                                                    seconds: 2,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      )
+                                      : Row(
+                                        children: [
+                                          Icon(
+                                            _message.contains('fail')
+                                                ? Icons.error_outline
+                                                : Icons.info_outline,
+                                            color:
+                                                _message.contains('fail')
+                                                    ? colorScheme
+                                                        .onErrorContainer
+                                                    : colorScheme
+                                                        .onPrimaryContainer,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              _message,
+                                              style: TextStyle(
+                                                color:
+                                                    _message.contains('fail')
+                                                        ? colorScheme
+                                                            .onErrorContainer
+                                                        : colorScheme
+                                                            .onPrimaryContainer,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                            ),
+
+                          // Action buttons with improved styling
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.photo_library),
+                                label: const Text('Select Image'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      colorScheme.secondaryContainer,
+                                  foregroundColor:
+                                      colorScheme.onSecondaryContainer,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 15,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: _isLoading ? null : _pickImage,
+                              ),
+                              const SizedBox(width: 20),
+                              ElevatedButton.icon(
+                                icon:
+                                    _isLoading
+                                        ? SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: colorScheme.onPrimary,
+                                          ),
+                                        )
+                                        : const Icon(Icons.upload),
+                                label: Text(
+                                  _isLoading ? 'Uploading...' : 'Upload',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: colorScheme.primary,
+                                  foregroundColor: colorScheme.onPrimary,
+                                  disabledBackgroundColor: colorScheme
+                                      .onSurfaceVariant
+                                      .withOpacity(0.12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 15,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed:
+                                    _isLoading || _selectedImageBytes == null
+                                        ? null
+                                        : _uploadImage,
                               ),
                             ],
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
-              ],
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Files list card with improved error handling and retry button
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Section header with actions
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Recent Files',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w500,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      _fileListMessage,
+                                      style: TextStyle(
+                                        color:
+                                            _fileListMessage.contains('Error')
+                                                ? colorScheme.error
+                                                : colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.refresh,
+                                        color: colorScheme.primary,
+                                      ),
+                                      tooltip: 'Refresh file list',
+                                      onPressed:
+                                          _isLoadingFiles
+                                              ? null
+                                              : _refreshFileList,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Files list with improved error feedback
+                          _isLoadingFiles
+                              ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 40),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                              : _fileListMessage.contains('Error')
+                              ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 40,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        size: 48,
+                                        color: colorScheme.error.withOpacity(
+                                          0.7,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Error loading files',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: colorScheme.error,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ElevatedButton.icon(
+                                        onPressed: _refreshFileList,
+                                        icon: const Icon(Icons.refresh),
+                                        label: const Text('Try Again'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              colorScheme.errorContainer,
+                                          foregroundColor:
+                                              colorScheme.onErrorContainer,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              : _bucketFiles.isEmpty
+                              ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 40,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.folder_off,
+                                        size: 48,
+                                        color: colorScheme.onSurfaceVariant
+                                            .withOpacity(0.5),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No files found in bucket',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              : ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _bucketFiles.length,
+                                separatorBuilder:
+                                    (context, index) =>
+                                        const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final file = _bucketFiles[index];
+
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                      horizontal: 16,
+                                    ),
+                                    // Use consistent file icon for all files
+                                    leading: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.surfaceVariant,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Icon(
+                                        Icons.insert_drive_file,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      file.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '${((file.metadata?['size'] ?? 0) / 1024).toStringAsFixed(2)} KB',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.copy,
+                                            size: 20,
+                                            color: colorScheme.primary,
+                                          ),
+                                          tooltip: 'Copy URL',
+                                          onPressed:
+                                              () => _copyUrlToClipboard(
+                                                file.name,
+                                              ),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.delete,
+                                            size: 20,
+                                            color: colorScheme.error,
+                                          ),
+                                          tooltip: 'Delete file',
+                                          onPressed:
+                                              () => _deleteFile(file.name),
+                                        ),
+                                      ],
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    hoverColor: colorScheme.surfaceVariant
+                                        .withOpacity(0.3),
+                                  );
+                                },
+                              ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
