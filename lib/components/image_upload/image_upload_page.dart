@@ -518,7 +518,6 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
 
     return Scaffold(
       appBar: _buildAppBar(colorScheme),
-      drawer: AppDrawer(currentPage: 'Image Upload', onPageSelected: (_) {}),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -566,6 +565,19 @@ class _ImageUploadPageState extends State<ImageUploadPage> {
       elevation: 0,
       backgroundColor: colorScheme.primary,
       foregroundColor: colorScheme.onPrimary,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () {
+          // Check if we can pop the current route
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          } else {
+            // If we can't pop, navigate to a specific route
+            // Replace 'home' with your actual route name
+            Navigator.of(context).pushReplacementNamed('/');
+          }
+        },
+      ),
     );
   }
 
