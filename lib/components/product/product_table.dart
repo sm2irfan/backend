@@ -336,6 +336,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   // Column visibility manager
   late ColumnVisibilityManager _columnVisibilityManager;
 
+  // Table dimensions manager
+  late TableDimensionsManager _dimensionsManager;
+
   // Column titles
   final List<String> _titles = [
     'ID',
@@ -362,16 +365,34 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     // Initialize the column visibility manager
     _columnVisibilityManager = ColumnVisibilityManager(
       columnTitles: _titles,
-      prefsKey:
-          'product_table_column_visibility', // Optional: persist preferences
+      prefsKey: 'product_table_column_visibility',
+    );
+
+    // Initialize the dimensions manager
+    _dimensionsManager = TableDimensionsManager(
+      prefsKey: 'product_table_dimensions',
+      initialColumnWidths: _columnWidths,
+      defaultRowHeight: _tableConfig.getRowHeight(),
     );
 
     // Load any saved column visibility preferences with setState callback
     _columnVisibilityManager.loadSavedPreferences(
       onComplete: () {
-        // This will refresh the UI after loading preferences
+        if (mounted) setState(() {});
+      },
+    );
+
+    // Load any saved dimensions with setState callback
+    _dimensionsManager.loadSavedDimensions(
+      onComplete: () {
         if (mounted) {
-          setState(() {});
+          setState(() {
+            _rowHeight = _dimensionsManager.getRowHeight();
+            // Update column widths with saved values
+            for (int i = 0; i < _columnWidths.length; i++) {
+              _columnWidths[i] = _dimensionsManager.getColumnWidth(i);
+            }
+          });
         }
       },
     );
@@ -1339,11 +1360,19 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                 setState(() {
                   _columnWidths[index] = (_columnWidths[index] + d.delta.dx)
                       .clamp(30.0, double.infinity);
+                  // Save column width to database
+                  _tableConfig.updateColumnWidth(
+                    index,
+                    _columnWidths[index],
+                    _dimensionsManager,
+                  );
                 });
               },
               onVerticalDragUpdate: (d) {
                 setState(() {
                   _rowHeight = (_rowHeight + d.delta.dy).clamp(40.0, 200.0);
+                  // Save row height to database
+                  _tableConfig.updateRowHeight(_rowHeight, _dimensionsManager);
                 });
               },
               child: Container(width: 10, color: Colors.transparent),

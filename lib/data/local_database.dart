@@ -50,7 +50,6 @@ class LocalDatabase {
         // Important: Set the database factory IMMEDIATELY after initialization
         // This fixes the "databaseFactory not initialized" error
         databaseFactory = databaseFactoryFfi;
-        developer.log('Set database factory to FFI implementation');
 
         // On Linux, check if SQLite is installed
         if (Platform.isLinux) {
@@ -58,7 +57,6 @@ class LocalDatabase {
             // Test if we can open a database
             final dbTest = await databaseFactory.openDatabase(':memory:');
             await dbTest.close();
-            developer.log('SQLite library test successful');
             _sqliteAvailable = true;
           } catch (e) {
             developer.log('SQLite library test failed: $e');
@@ -84,14 +82,10 @@ Then restart the application.
           }
         }
 
-        developer.log(
-          'Successfully initialized SQLite FFI for desktop platform',
-        );
         return true;
       } else if (Platform.isAndroid || Platform.isIOS) {
         // On mobile, SQLite is natively supported
         _sqliteAvailable = true;
-        developer.log('Running on mobile, using native SQLite');
         return true;
       }
     } catch (e) {
@@ -211,15 +205,12 @@ Then restart the application.
     int oldVersion,
     int newVersion,
   ) async {
-    developer.log('Upgrading database from v$oldVersion to v$newVersion');
-
     if (oldVersion < 2) {
       // Check if the column exists before adding it to avoid errors
       var columns = await db.rawQuery('PRAGMA table_info(all_products)');
       var columnNames = columns.map((c) => c['name'] as String).toList();
 
       if (!columnNames.contains('updated_at')) {
-        developer.log('Adding updated_at column to all_products table');
         await db.execute('ALTER TABLE all_products ADD COLUMN updated_at TEXT');
       }
     }
@@ -277,8 +268,6 @@ Then restart the application.
         // Fetch all products from Supabase
         final response = await _supabaseClient.from('all_products').select();
 
-        developer.log('Fetched ${response.length} products from Supabase');
-
         // Insert each product into SQLite
         int successCount = 0;
         int failCount = 0;
@@ -310,10 +299,6 @@ Then restart the application.
             failCount++;
           }
         }
-
-        developer.log(
-          'Sync completed: $successCount products inserted, $failCount failed',
-        );
       });
 
       // Get count of records after transaction
@@ -433,23 +418,16 @@ Then restart the application.
 
                   // Join all word conditions with AND
                   conditions.add('(${wordConditions.join(' AND ')})');
-
-                  developer.log(
-                    'Added multi-word LIKE query for name with words: $words',
-                  );
                 }
               } else {
                 // Single word search - existing behavior
                 conditions.add('name LIKE ?');
                 queryArgs.add('%$searchTerm%');
-
-                developer.log('Added LIKE query for name: %$searchTerm%');
               }
             } else {
               // Standard exact match
               conditions.add('name = ?');
               queryArgs.add(nameFilter);
-              developer.log('Added exact match query for name: $nameFilter');
             }
           }
         }
@@ -465,14 +443,10 @@ Then restart the application.
               final String searchTerm = categoryFilter.substring(5).trim();
               conditions.add('category_1 LIKE ?');
               queryArgs.add('%$searchTerm%');
-              developer.log('Added LIKE query for category1: %$searchTerm%');
             } else {
               // Use LIKE query for category1 regardless (for partial matching)
               conditions.add('category_1 LIKE ?');
               queryArgs.add('%$categoryFilter%');
-              developer.log(
-                'Added LIKE query for category1: %$categoryFilter%',
-              );
             }
           }
         }
@@ -593,9 +567,6 @@ Then restart the application.
         whereArgs: [product.id],
       );
 
-      developer.log(
-        'Updated product #${product.id}: ${rowsAffected} rows affected',
-      );
       return rowsAffected > 0;
     } catch (e) {
       developer.log('Error updating product: $e');
@@ -621,7 +592,6 @@ Then restart the application.
         whereArgs: [productId],
       );
 
-      developer.log('Deleted product #$productId: $rowsAffected rows affected');
       return rowsAffected > 0;
     } catch (e) {
       developer.log('Error deleting product: $e');
@@ -659,7 +629,6 @@ Then restart the application.
         'matching_words': product.matchingWords,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-      developer.log('Inserted new product with ID: $id');
       return id > 0;
     } catch (e) {
       developer.log('Error inserting product: $e');
@@ -678,7 +647,6 @@ Then restart the application.
       );
 
       if (tables.isEmpty) {
-        developer.log('Creating column_visibility table');
         await db.execute('''
         CREATE TABLE column_visibility(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -688,7 +656,6 @@ Then restart the application.
           UNIQUE(view_name, column_index)
         )
         ''');
-        developer.log('Column visibility table created successfully');
       }
     } catch (e) {
       developer.log('Error creating column visibility table: $e');
@@ -730,10 +697,6 @@ Then restart the application.
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
-
-      developer.log(
-        'Saved column visibility settings for $viewName: $hiddenColumns',
-      );
     } catch (e) {
       developer.log('Error saving column visibility settings: $e');
       // Don't throw here to prevent UI crashes if saving fails
@@ -762,14 +725,176 @@ Then restart the application.
 
       final List<int> hiddenColumns =
           results.map((row) => row['column_index'] as int).toList();
-      developer.log(
-        'Loaded column visibility settings for $viewName: $hiddenColumns',
-      );
 
       return hiddenColumns;
     } catch (e) {
       developer.log('Error loading column visibility settings: $e');
       return [];
+    }
+  }
+
+  // Ensure that the column dimensions tables exist
+  Future<void> ensureColumnDimensionsTablesExist() async {
+    try {
+      final db = await database;
+
+      // Check if the column width table exists
+      final widthTables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='column_widths'",
+      );
+
+      if (widthTables.isEmpty) {
+        await db.execute('''
+        CREATE TABLE column_widths(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          view_name TEXT NOT NULL,
+          column_index INTEGER NOT NULL,
+          width REAL NOT NULL,
+          UNIQUE(view_name, column_index)
+        )
+        ''');
+      }
+
+      // Check if the row height table exists
+      final heightTables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='row_heights'",
+      );
+
+      if (heightTables.isEmpty) {
+        await db.execute('''
+        CREATE TABLE row_heights(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          view_name TEXT NOT NULL,
+          height REAL NOT NULL,
+          UNIQUE(view_name)
+        )
+        ''');
+      }
+    } catch (e) {
+      developer.log('Error creating column dimensions tables: $e');
+    }
+  }
+
+  // Save column widths to the database
+  Future<void> saveColumnWidths(
+    String viewName,
+    Map<int, double> columnWidths,
+  ) async {
+    if (!await isSqliteAvailable()) {
+      return;
+    }
+
+    try {
+      // Ensure the table exists
+      await ensureColumnDimensionsTablesExist();
+
+      final db = await database;
+
+      // Start a transaction for batch operations
+      await db.transaction((txn) async {
+        // Delete existing settings for this view
+        await txn.delete(
+          'column_widths',
+          where: 'view_name = ?',
+          whereArgs: [viewName],
+        );
+
+        // Insert new width values
+        columnWidths.forEach((columnIndex, width) async {
+          await txn.insert('column_widths', {
+            'view_name': viewName,
+            'column_index': columnIndex,
+            'width': width,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        });
+      });
+    } catch (e) {
+      developer.log('Error saving column widths: $e');
+    }
+  }
+
+  // Load column widths from the database
+  Future<Map<int, double>> loadColumnWidths(String viewName) async {
+    if (!await isSqliteAvailable()) {
+      return {};
+    }
+
+    try {
+      // Ensure the table exists
+      await ensureColumnDimensionsTablesExist();
+
+      final db = await database;
+
+      // Query saved column widths
+      final results = await db.query(
+        'column_widths',
+        columns: ['column_index', 'width'],
+        where: 'view_name = ?',
+        whereArgs: [viewName],
+      );
+
+      final Map<int, double> columnWidths = {};
+      for (var row in results) {
+        columnWidths[row['column_index'] as int] = row['width'] as double;
+      }
+
+      return columnWidths;
+    } catch (e) {
+      developer.log('Error loading column widths: $e');
+      return {};
+    }
+  }
+
+  // Save row height to the database
+  Future<void> saveRowHeight(String viewName, double height) async {
+    if (!await isSqliteAvailable()) {
+      return;
+    }
+
+    try {
+      // Ensure the table exists
+      await ensureColumnDimensionsTablesExist();
+
+      final db = await database;
+
+      // Insert or replace row height
+      await db.insert('row_heights', {
+        'view_name': viewName,
+        'height': height,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      developer.log('Error saving row height: $e');
+    }
+  }
+
+  // Load row height from the database
+  Future<double?> loadRowHeight(String viewName) async {
+    if (!await isSqliteAvailable()) {
+      return null;
+    }
+
+    try {
+      // Ensure the table exists
+      await ensureColumnDimensionsTablesExist();
+
+      final db = await database;
+
+      // Query saved row height
+      final results = await db.query(
+        'row_heights',
+        columns: ['height'],
+        where: 'view_name = ?',
+        whereArgs: [viewName],
+      );
+
+      if (results.isNotEmpty) {
+        final height = results.first['height'] as double;
+        return height;
+      }
+      return null;
+    } catch (e) {
+      developer.log('Error loading row height: $e');
+      return null;
     }
   }
 }

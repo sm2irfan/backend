@@ -176,8 +176,6 @@ class ColumnVisibilityManager {
         hiddenIndices.where((i) => i >= 0 && i < columnTitles.length),
       );
 
-      print('Loaded hidden columns: $_hiddenColumns'); // Debugging log
-
       // Call the callback if provided to refresh UI
       if (onComplete != null) {
         onComplete();
@@ -243,6 +241,113 @@ class ColumnVisibilityManager {
   }
 }
 
+/// Manages the table dimensions (column widths and row height)
+class TableDimensionsManager {
+  /// Key for storing preferences in database
+  final String? prefsKey;
+
+  /// Local database instance for persistence
+  final LocalDatabase _localDatabase = LocalDatabase();
+
+  /// Map of column indices to their widths
+  final Map<int, double> _columnWidths = {};
+
+  /// Current row height
+  double _rowHeight;
+
+  /// Default row height to use if no saved value
+  final double _defaultRowHeight;
+
+  TableDimensionsManager({
+    required this.prefsKey,
+    required List<double> initialColumnWidths,
+    required double defaultRowHeight,
+  }) : _rowHeight = defaultRowHeight,
+       _defaultRowHeight = defaultRowHeight {
+    // Initialize column widths with default values
+    for (int i = 0; i < initialColumnWidths.length; i++) {
+      _columnWidths[i] = initialColumnWidths[i];
+    }
+  }
+
+  /// Get the current width for a column
+  double getColumnWidth(int index) => _columnWidths[index] ?? 120.0;
+
+  /// Get the current row height
+  double getRowHeight() => _rowHeight;
+
+  /// Set the width for a specific column and save to database
+  void setColumnWidth(int index, double width) {
+    _columnWidths[index] = width;
+    if (prefsKey != null) {
+      _saveColumnWidths();
+    }
+  }
+
+  /// Set the row height and save to database
+  void setRowHeight(double height) {
+    _rowHeight = height;
+    if (prefsKey != null) {
+      _saveRowHeight();
+    }
+  }
+
+  /// Get all column widths as a map
+  Map<int, double> get columnWidths => Map.from(_columnWidths);
+
+  /// Load saved dimensions from SQLite database
+  Future<void> loadSavedDimensions({VoidCallback? onComplete}) async {
+    if (prefsKey == null) return;
+
+    bool needsUpdate = false;
+
+    try {
+      // Load column widths
+      final savedWidths = await _localDatabase.loadColumnWidths(prefsKey!);
+      if (savedWidths.isNotEmpty) {
+        _columnWidths.addAll(savedWidths);
+        needsUpdate = true;
+      }
+
+      // Load row height
+      final savedHeight = await _localDatabase.loadRowHeight(prefsKey!);
+      if (savedHeight != null) {
+        _rowHeight = savedHeight;
+        needsUpdate = true;
+      }
+
+      // Call the callback if provided and if there were changes
+      if (needsUpdate && onComplete != null) {
+        onComplete();
+      }
+    } catch (e) {
+      print('Error loading table dimensions: $e');
+    }
+  }
+
+  /// Save column widths to SQLite database
+  Future<void> _saveColumnWidths() async {
+    if (prefsKey == null) return;
+
+    try {
+      await _localDatabase.saveColumnWidths(prefsKey!, _columnWidths);
+    } catch (e) {
+      print('Error saving column widths: $e');
+    }
+  }
+
+  /// Save row height to SQLite database
+  Future<void> _saveRowHeight() async {
+    if (prefsKey == null) return;
+
+    try {
+      await _localDatabase.saveRowHeight(prefsKey!, _rowHeight);
+    } catch (e) {
+      print('Error saving row height: $e');
+    }
+  }
+}
+
 // MARK: - Table Configuration
 
 /// Base configuration for responsive product tables
@@ -266,6 +371,23 @@ abstract class ProductTableConfig {
     required Widget Function(String, int, TextStyle) buildColumnHeader,
     required Widget Function(bool) buildTableRows,
   });
+
+  // Update column width in dimensions manager
+  void updateColumnWidth(
+    int columnIndex,
+    double width,
+    TableDimensionsManager dimensionsManager,
+  ) {
+    dimensionsManager.setColumnWidth(columnIndex, width);
+  }
+
+  // Update row height in dimensions manager
+  void updateRowHeight(
+    double height,
+    TableDimensionsManager dimensionsManager,
+  ) {
+    dimensionsManager.setRowHeight(height);
+  }
 }
 
 /// Mobile-specific implementation of product table
@@ -376,6 +498,23 @@ class MobileTableConfig implements ProductTableConfig {
       default:
         return 1;
     }
+  }
+
+  @override
+  void updateColumnWidth(
+    int columnIndex,
+    double width,
+    TableDimensionsManager dimensionsManager,
+  ) {
+    dimensionsManager.setColumnWidth(columnIndex, width);
+  }
+
+  @override
+  void updateRowHeight(
+    double height,
+    TableDimensionsManager dimensionsManager,
+  ) {
+    dimensionsManager.setRowHeight(height);
   }
 }
 
@@ -495,6 +634,23 @@ class DesktopTableConfig implements ProductTableConfig {
       default:
         return 1;
     }
+  }
+
+  @override
+  void updateColumnWidth(
+    int columnIndex,
+    double width,
+    TableDimensionsManager dimensionsManager,
+  ) {
+    dimensionsManager.setColumnWidth(columnIndex, width);
+  }
+
+  @override
+  void updateRowHeight(
+    double height,
+    TableDimensionsManager dimensionsManager,
+  ) {
+    dimensionsManager.setRowHeight(height);
   }
 }
 
