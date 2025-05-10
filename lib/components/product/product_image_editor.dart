@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'product.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:cross_file/cross_file.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A utility class for handling product image editing
 class ProductImageEditor {
@@ -115,12 +121,24 @@ class _ProductImageEditorDialog extends StatefulWidget {
 
 class _ProductImageEditorDialogState extends State<_ProductImageEditorDialog> {
   late TextEditingController urlController;
+  late TextEditingController _pathController;
+  late TextEditingController _filenameController;
   late String previewUrl;
+  bool _isDragging = false;
+  Uint8List? _selectedImageBytes;
+  String? _selectedImageName;
+  bool _isUploading = false;
+  String _uploadMessage = '';
+
+  // Add Supabase client instance
+  final _supabase = Supabase.instance.client;
 
   @override
   void initState() {
     super.initState();
     urlController = TextEditingController(text: widget.product.image ?? '');
+    _pathController = TextEditingController();
+    _filenameController = TextEditingController();
     previewUrl = widget.product.image ?? '';
   }
 
@@ -128,7 +146,165 @@ class _ProductImageEditorDialogState extends State<_ProductImageEditorDialog> {
   void dispose() {
     // Now the controller will be properly disposed with the widget
     urlController.dispose();
+    _pathController.dispose();
+    _filenameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleDroppedFile(XFile file) async {
+    try {
+      final bytes = await file.readAsBytes();
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedImageBytes = bytes;
+        _selectedImageName = file.name;
+        previewUrl = 'dropped_file://${file.name}'; // Keep this for preview
+        // Set the path in the path controller instead of URL controller
+        _pathController.text = file.path;
+        // Set a default filename based on the dropped file
+        _filenameController.text = file.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Error'),
+              content: Text('Failed to read dropped file: ${e.toString()}'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+      );
+    }
+  }
+
+  bool get _isDesktop => !kIsWeb && !Platform.isIOS && !Platform.isAndroid;
+
+  Future<void> _loadFileFromPath(String filePath) async {
+    if (filePath.isEmpty) {
+      _showErrorDialog('No file path provided');
+      return;
+    }
+
+    try {
+      if (Platform.isWindows && !filePath.contains(':\\')) {
+        _showErrorDialog(
+          'Please provide a complete path (e.g., C:\\Users\\...)',
+        );
+        return;
+      }
+
+      final file = File(filePath);
+      if (!await file.exists()) {
+        if (!mounted) return;
+        _showErrorDialog('File not found: $filePath');
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      final filename = file.path.split(Platform.pathSeparator).last;
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedImageBytes = bytes;
+        _selectedImageName = filename;
+        previewUrl =
+            'file://$filePath'; // Use a protocol to indicate it's a file
+        // Set a default filename
+        _filenameController.text = filename;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorDialog('Error reading file: ${e.toString()}');
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<String> _prepareFileName() async {
+    if (_selectedImageName == null) return '';
+
+    final fileExt =
+        _selectedImageName!.contains('.')
+            ? _selectedImageName!.substring(
+              _selectedImageName!.lastIndexOf('.'),
+            )
+            : '';
+    final customName = _filenameController.text.trim();
+
+    if (customName.isNotEmpty) {
+      final sanitizedName = customName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      return sanitizedName.endsWith(fileExt)
+          ? sanitizedName
+          : '$sanitizedName$fileExt';
+    } else {
+      return 'product_image_${DateTime.now().millisecondsSinceEpoch}$fileExt';
+    }
+  }
+
+  // Add upload functionality
+  Future<void> _uploadImage() async {
+    if (_selectedImageBytes == null || _selectedImageName == null) {
+      _showErrorDialog('Please select an image first');
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+      _uploadMessage = 'Uploading...';
+    });
+
+    try {
+      final fileName = await _prepareFileName();
+      await _supabase.storage
+          .from('product_image')
+          .uploadBinary(fileName, _selectedImageBytes!);
+      final imageUrl = _supabase.storage
+          .from('product_image')
+          .getPublicUrl(fileName);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isUploading = false;
+        _uploadMessage = 'Upload successful!';
+        urlController.text = imageUrl; // Update URL field with the new URL
+        previewUrl = imageUrl; // Update preview with the new URL
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isUploading = false;
+        _uploadMessage = 'Upload failed: ${e.toString()}';
+      });
+
+      _showErrorDialog('Failed to upload image: ${e.toString()}');
+    }
   }
 
   @override
@@ -273,6 +449,111 @@ class _ProductImageEditorDialogState extends State<_ProductImageEditorDialog> {
                       ),
                       const SizedBox(height: 24),
 
+                      // Add file path input field
+                      if (_isDesktop)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Image File Path',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _pathController,
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          Platform.isWindows
+                                              ? 'C:\\Users\\username\\Pictures\\image.jpg'
+                                              : '/path/to/image.jpg',
+                                      prefixIcon: const Icon(Icons.folder_open),
+                                      filled: true,
+                                      fillColor: Colors.grey[100],
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.blue[300]!,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  onPressed:
+                                      () => _loadFileFromPath(
+                                        _pathController.text.trim(),
+                                      ),
+                                  icon: const Icon(Icons.file_open),
+                                  label: const Text('Load'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                      horizontal: 16,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+
+                            // Add custom filename field
+                            const Text(
+                              'Custom Filename (optional)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _filenameController,
+                              decoration: InputDecoration(
+                                hintText: 'Enter desired filename for upload',
+                                prefixIcon: const Icon(
+                                  Icons.drive_file_rename_outline,
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey[100],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey[300]!,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Colors.blue[300]!,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
                       // Upload options
                       const Text(
                         'Or upload from device',
@@ -282,60 +563,242 @@ class _ProductImageEditorDialogState extends State<_ProductImageEditorDialog> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () {
-                          // Use showDialog instead of SnackBar to avoid Scaffold dependency
-                          showDialog(
-                            context: context,
-                            builder:
-                                (context) => AlertDialog(
-                                  title: const Text('Upload Feature'),
-                                  content: const Text(
-                                    'File upload functionality would be implemented here',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('OK'),
+                      if (_isDesktop)
+                        DropTarget(
+                          onDragDone: (details) async {
+                            if (details.files.isNotEmpty) {
+                              await _handleDroppedFile(details.files.first);
+                            }
+                          },
+                          onDragEntered:
+                              (_) => setState(() => _isDragging = true),
+                          onDragExited:
+                              (_) => setState(() => _isDragging = false),
+                          child: InkWell(
+                            onTap: () {
+                              // Use showDialog instead of SnackBar to avoid Scaffold dependency
+                              showDialog(
+                                context: context,
+                                builder:
+                                    (context) => AlertDialog(
+                                      title: const Text('Upload Feature'),
+                                      content: const Text(
+                                        'File upload functionality would be implemented here',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () => Navigator.pop(context),
+                                          child: const Text('OK'),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                              );
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color:
+                                    _isDragging
+                                        ? Colors.blue.withOpacity(0.1)
+                                        : Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color:
+                                      _isDragging
+                                          ? Colors.blue
+                                          : Colors.grey[300]!,
+                                  width: _isDragging ? 2 : 1,
                                 ),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.grey[300]!,
-                              width: 1,
+                                boxShadow:
+                                    _isDragging
+                                        ? [
+                                          BoxShadow(
+                                            color: Colors.blue.withOpacity(0.3),
+                                            blurRadius: 8,
+                                            spreadRadius: 2,
+                                          ),
+                                        ]
+                                        : null,
+                              ),
+                              child:
+                                  _selectedImageBytes != null
+                                      ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(11),
+                                        child: Image.memory(
+                                          _selectedImageBytes!,
+                                          height: 120,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      )
+                                      : Column(
+                                        children: [
+                                          Icon(
+                                            Icons.cloud_upload,
+                                            size: 40,
+                                            color:
+                                                _isDragging
+                                                    ? Colors.blue
+                                                    : Colors.blue[400],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            _isDragging
+                                                ? 'Release to drop file'
+                                                : 'Click to browse or drag & drop',
+                                            style: TextStyle(
+                                              color:
+                                                  _isDragging
+                                                      ? Colors.blue
+                                                      : Colors.black87,
+                                              fontWeight:
+                                                  _isDragging
+                                                      ? FontWeight.bold
+                                                      : FontWeight.normal,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'PNG, JPG up to 5MB',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                             ),
                           ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.cloud_upload,
-                                size: 40,
-                                color: Colors.blue[400],
+                        )
+                      else
+                        InkWell(
+                          onTap: () {
+                            // Use showDialog instead of SnackBar to avoid Scaffold dependency
+                            showDialog(
+                              context: context,
+                              builder:
+                                  (context) => AlertDialog(
+                                    title: const Text('Upload Feature'),
+                                    content: const Text(
+                                      'File upload functionality would be implemented here',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('OK'),
+                                      ),
+                                    ],
+                                  ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.grey[300]!,
+                                width: 1,
                               ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Click to browse or drag & drop',
-                                style: TextStyle(color: Colors.black87),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'PNG, JPG up to 5MB',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.cloud_upload,
+                                  size: 40,
+                                  color: Colors.blue[400],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Click to browse or drag & drop',
+                                  style: TextStyle(color: Colors.black87),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'PNG, JPG up to 5MB',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
+
+                      // Add upload status message if any
+                      if (_uploadMessage.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16.0),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  _uploadMessage.contains('fail')
+                                      ? Colors.red.withOpacity(0.1)
+                                      : Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color:
+                                    _uploadMessage.contains('fail')
+                                        ? Colors.red.withOpacity(0.5)
+                                        : Colors.green.withOpacity(0.5),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _uploadMessage.contains('fail')
+                                      ? Icons.error_outline
+                                      : Icons.check_circle_outline,
+                                  color:
+                                      _uploadMessage.contains('fail')
+                                          ? Colors.red
+                                          : Colors.green,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(_uploadMessage)),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Add upload button
+                      if (_selectedImageBytes != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16.0),
+                          child: ElevatedButton.icon(
+                            onPressed: _isUploading ? null : _uploadImage,
+                            icon:
+                                _isUploading
+                                    ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                    : const Icon(Icons.cloud_upload),
+                            label: Text(
+                              _isUploading
+                                  ? 'Uploading...'
+                                  : 'Upload to Supabase',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
