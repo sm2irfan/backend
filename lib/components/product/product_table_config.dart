@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../data/local_database.dart';
 import 'product.dart';
 
 // MARK: - Column Visibility Manager
@@ -9,8 +10,11 @@ class ColumnVisibilityManager {
   /// Column titles for reference
   final List<String> columnTitles;
 
-  /// Optional key for storing preferences
+  /// Key for storing preferences in database
   final String? prefsKey;
+
+  /// Local database instance for persistence
+  final LocalDatabase _localDatabase = LocalDatabase();
 
   final Set<int> _hiddenColumns = <int>{};
 
@@ -103,44 +107,106 @@ class ColumnVisibilityManager {
     );
   }
 
-  /// Build chips section for hidden columns
+  /// Build hidden columns section with SQLite persistence status
   Widget buildHiddenColumnsSection(
     BuildContext context,
-    Function(int) onShowColumn,
+    void Function(int) onShowColumn,
   ) {
     if (_hiddenColumns.isEmpty) {
-      return const SizedBox.shrink();
+      return Container(); // No hidden columns, don't show section
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Wrap(
-        spacing: 8.0,
-        runSpacing: 4.0,
-        children:
-            _hiddenColumns.map((index) {
-              return InputChip(
-                label: Text(
-                  columnTitles[index],
-                  style: const TextStyle(fontSize: 12),
-                ),
-                onPressed: () => onShowColumn(index),
-                deleteIcon: const Icon(Icons.visibility, size: 16),
-                onDeleted: () => onShowColumn(index),
-                backgroundColor: Theme.of(
-                  context,
-                ).primaryColor.withOpacity(0.1),
-                deleteIconColor: Theme.of(context).primaryColor,
-              );
-            }).toList(),
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Hidden Columns:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.storage, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                'Auto-saved',
+                style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8.0,
+            runSpacing: 4.0,
+            children:
+                _hiddenColumns.map((index) {
+                  return InputChip(
+                    label: Text(
+                      columnTitles[index],
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: () => onShowColumn(index),
+                    deleteIcon: const Icon(Icons.visibility, size: 16),
+                    onDeleted: () => onShowColumn(index),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).primaryColor.withOpacity(0.1),
+                    deleteIconColor: Theme.of(context).primaryColor,
+                  );
+                }).toList(),
+          ),
+        ],
       ),
     );
   }
 
-  /// Load saved preferences
-  Future<void> loadSavedPreferences() async {
+  /// Load saved preferences from SQLite database
+  Future<void> loadSavedPreferences({VoidCallback? onComplete}) async {
     if (prefsKey == null) return;
 
+    try {
+      final List<int> hiddenIndices = await _localDatabase.loadColumnVisibility(
+        prefsKey!,
+      );
+
+      _hiddenColumns.clear();
+      _hiddenColumns.addAll(
+        hiddenIndices.where((i) => i >= 0 && i < columnTitles.length),
+      );
+
+      print('Loaded hidden columns: $_hiddenColumns'); // Debugging log
+
+      // Call the callback if provided to refresh UI
+      if (onComplete != null) {
+        onComplete();
+      }
+    } catch (e) {
+      print('Error loading column visibility preferences: $e');
+      // Fall back to SharedPreferences if database fails
+      _loadFromSharedPreferences(onComplete: onComplete);
+    }
+  }
+
+  /// Save preferences to SQLite database
+  Future<void> _savePreferences() async {
+    if (prefsKey == null) return;
+
+    try {
+      await _localDatabase.saveColumnVisibility(
+        prefsKey!,
+        _hiddenColumns.toList(),
+      );
+    } catch (e) {
+      print('Error saving column visibility preferences: $e');
+      // Fall back to SharedPreferences if database fails
+      _saveToSharedPreferences();
+    }
+  }
+
+  /// Legacy method to load from SharedPreferences as fallback
+  Future<void> _loadFromSharedPreferences({VoidCallback? onComplete}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final List<String>? hiddenIndices = prefs.getStringList(prefsKey!);
@@ -152,16 +218,19 @@ class ColumnVisibilityManager {
               .map((s) => int.tryParse(s) ?? -1)
               .where((i) => i >= 0 && i < columnTitles.length),
         );
+
+        // Call the callback if provided
+        if (onComplete != null) {
+          onComplete();
+        }
       }
     } catch (e) {
-      print('Error loading column visibility preferences: $e');
+      print('Error loading from SharedPreferences: $e');
     }
   }
 
-  /// Save preferences
-  Future<void> _savePreferences() async {
-    if (prefsKey == null) return;
-
+  /// Legacy method to save to SharedPreferences as fallback
+  Future<void> _saveToSharedPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
@@ -169,7 +238,7 @@ class ColumnVisibilityManager {
         _hiddenColumns.map((i) => i.toString()).toList(),
       );
     } catch (e) {
-      print('Error saving column visibility preferences: $e');
+      print('Error saving to SharedPreferences: $e');
     }
   }
 }

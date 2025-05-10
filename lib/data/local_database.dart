@@ -131,17 +131,57 @@ Then restart the application.
       final String path = await getDatabasesPath();
       final String dbPath = join(path, 'product_database.db');
 
-      developer.log('Initializing SQLite database at $dbPath');
-
       return await openDatabase(
         dbPath,
-        version: 2, // Increment version from 1 to 2
-        onCreate: _createDatabase,
-        onUpgrade: _upgradeDatabase, // Add this onUpgrade handler
+        version: 2, // Increased version number for migration
+        onCreate: (db, version) async {
+          await db.execute('''
+          CREATE TABLE all_products(
+            id INTEGER PRIMARY KEY,
+            created_at TEXT,
+            updated_at TEXT,
+            name TEXT,
+            uprices TEXT,
+            image TEXT,
+            discount INTEGER,
+            description TEXT,
+            category_1 TEXT,
+            category_2 TEXT,
+            popular_product INTEGER,
+            matching_words TEXT
+          )
+          ''');
+
+          // Create the column visibility settings table
+          await db.execute('''
+          CREATE TABLE column_visibility(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            view_name TEXT NOT NULL,
+            column_index INTEGER NOT NULL,
+            is_visible INTEGER NOT NULL,
+            UNIQUE(view_name, column_index)
+          )
+          ''');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            // Add column_visibility table if upgrading from version 1
+            await db.execute('''
+            CREATE TABLE IF NOT EXISTS column_visibility(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              view_name TEXT NOT NULL,
+              column_index INTEGER NOT NULL,
+              is_visible INTEGER NOT NULL,
+              UNIQUE(view_name, column_index)
+            )
+            ''');
+          }
+        },
       );
     } catch (e) {
       developer.log('Error initializing database: $e');
-      rethrow;
+      _sqliteAvailable = false;
+      throw SqliteNotAvailableException('Failed to initialize SQLite: $e');
     }
   }
 
@@ -624,6 +664,112 @@ Then restart the application.
     } catch (e) {
       developer.log('Error inserting product: $e');
       return false;
+    }
+  }
+
+  // Ensure that the column visibility table exists
+  Future<void> ensureColumnVisibilityTableExists() async {
+    try {
+      final db = await database;
+
+      // Check if the table exists
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='column_visibility'",
+      );
+
+      if (tables.isEmpty) {
+        developer.log('Creating column_visibility table');
+        await db.execute('''
+        CREATE TABLE column_visibility(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          view_name TEXT NOT NULL,
+          column_index INTEGER NOT NULL,
+          is_visible INTEGER NOT NULL,
+          UNIQUE(view_name, column_index)
+        )
+        ''');
+        developer.log('Column visibility table created successfully');
+      }
+    } catch (e) {
+      developer.log('Error creating column visibility table: $e');
+    }
+  }
+
+  // Save column visibility settings to the database
+  Future<void> saveColumnVisibility(
+    String viewName,
+    List<int> hiddenColumns,
+  ) async {
+    if (!await isSqliteAvailable()) {
+      throw SqliteNotAvailableException(
+        'SQLite library is not available. Please install SQLite development libraries.',
+      );
+    }
+
+    try {
+      // Ensure the table exists before attempting to use it
+      await ensureColumnVisibilityTableExists();
+
+      final db = await database;
+
+      // Start a transaction for batch operations
+      await db.transaction((txn) async {
+        // Delete existing settings for this view
+        await txn.delete(
+          'column_visibility',
+          where: 'view_name = ?',
+          whereArgs: [viewName],
+        );
+
+        // Insert new settings for hidden columns
+        for (int columnIndex in hiddenColumns) {
+          await txn.insert('column_visibility', {
+            'view_name': viewName,
+            'column_index': columnIndex,
+            'is_visible': 0, // 0 means hidden
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+
+      developer.log(
+        'Saved column visibility settings for $viewName: $hiddenColumns',
+      );
+    } catch (e) {
+      developer.log('Error saving column visibility settings: $e');
+      // Don't throw here to prevent UI crashes if saving fails
+    }
+  }
+
+  // Load column visibility settings from the database
+  Future<List<int>> loadColumnVisibility(String viewName) async {
+    if (!await isSqliteAvailable()) {
+      return [];
+    }
+
+    try {
+      // Ensure the table exists before attempting to query it
+      await ensureColumnVisibilityTableExists();
+
+      final db = await database;
+
+      // Query hidden columns
+      final results = await db.query(
+        'column_visibility',
+        columns: ['column_index'],
+        where: 'view_name = ? AND is_visible = 0',
+        whereArgs: [viewName],
+      );
+
+      final List<int> hiddenColumns =
+          results.map((row) => row['column_index'] as int).toList();
+      developer.log(
+        'Loaded column visibility settings for $viewName: $hiddenColumns',
+      );
+
+      return hiddenColumns;
+    } catch (e) {
+      developer.log('Error loading column visibility settings: $e');
+      return [];
     }
   }
 }

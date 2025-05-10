@@ -366,8 +366,15 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
           'product_table_column_visibility', // Optional: persist preferences
     );
 
-    // Load any saved column visibility preferences
-    _columnVisibilityManager.loadSavedPreferences();
+    // Load any saved column visibility preferences with setState callback
+    _columnVisibilityManager.loadSavedPreferences(
+      onComplete: () {
+        // This will refresh the UI after loading preferences
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
 
     // Initialize the AddProductManager with onStateChanged parameter
     _addProductManager = AddProductManager(
