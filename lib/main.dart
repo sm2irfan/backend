@@ -50,7 +50,7 @@ class AppRoot extends StatelessWidget {
       debugShowCheckedModeBanner: false,
 
       // Single root navigator and no nested navigators
-      initialRoute: AppRoutes.home,
+      initialRoute: AppRoutes.login,
 
       routes: {
         AppRoutes.home: (context) => const ProductDashboard(),
