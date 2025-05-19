@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Reuse the Product model but add Supabase-specific functionality
 class SupabaseProduct extends Equatable {
-  final int id; // Changed to non-nullable
+  final int id;
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String name;
@@ -17,9 +17,10 @@ class SupabaseProduct extends Equatable {
   final String? category2;
   final bool popularProduct;
   final String? matchingWords;
+  final bool production; // Add production field
 
   const SupabaseProduct({
-    required this.id, // Now required
+    required this.id,
     required this.createdAt,
     this.updatedAt,
     required this.name,
@@ -31,12 +32,13 @@ class SupabaseProduct extends Equatable {
     this.category2,
     required this.popularProduct,
     this.matchingWords,
+    this.production = false, // Default to false
   });
 
   // Convert to JSON for Supabase
   Map<String, dynamic> toJson() {
     return {
-      'id': id, // Always include id now
+      'id': id,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'name': name,
@@ -48,6 +50,7 @@ class SupabaseProduct extends Equatable {
       'category_2': category2,
       'popular_product': popularProduct,
       'matching_words': matchingWords,
+      'production': production, // Include in JSON
     };
   }
 
@@ -73,7 +76,7 @@ class SupabaseProduct extends Equatable {
       }
 
       return SupabaseProduct(
-        id: json['id'] as int, // Changed to non-nullable
+        id: json['id'] as int,
         createdAt: createdAt,
         updatedAt: updatedAt,
         name: json['name'] as String? ?? 'Unnamed Product',
@@ -88,6 +91,7 @@ class SupabaseProduct extends Equatable {
         category2: json['category_2'] as String?,
         popularProduct: json['popular_product'] as bool? ?? false,
         matchingWords: json['matching_words'] as String?,
+        production: json['production'] as bool? ?? false, // Parse from JSON
       );
     } catch (e) {
       rethrow;
@@ -108,6 +112,7 @@ class SupabaseProduct extends Equatable {
     String? category2,
     bool? popularProduct,
     String? matchingWords,
+    bool? production, // Add to copyWith
   }) {
     return SupabaseProduct(
       id: id ?? this.id,
@@ -122,6 +127,7 @@ class SupabaseProduct extends Equatable {
       category2: category2 ?? this.category2,
       popularProduct: popularProduct ?? this.popularProduct,
       matchingWords: matchingWords ?? this.matchingWords,
+      production: production ?? this.production, // Add to copyWith
     );
   }
 
@@ -139,13 +145,14 @@ class SupabaseProduct extends Equatable {
     category2,
     popularProduct,
     matchingWords,
+    production, // Add to props
   ];
 }
 
 // Repository for Supabase operations
 class SupabaseProductRepository {
   final SupabaseClient _supabaseClient = Supabase.instance.client;
-  final String _tableName = 'all_products';
+  final String _tableName = 'pre_all_products';
 
   // Create a new product
   Future<SupabaseProduct> createProduct(SupabaseProduct product) async {
@@ -170,15 +177,25 @@ class SupabaseProductRepository {
       // Always set updated_at to current time
       final productToUpdate = product.copyWith(updatedAt: DateTime.now());
 
+      // Debug log - print what we're sending to Supabase
+      print('Updating product in Supabase: ${productToUpdate.toJson()}');
+      print('Production value being sent: ${productToUpdate.production}');
+
       final response =
           await _supabaseClient
               .from(_tableName)
               .update(productToUpdate.toJson())
-              .eq('id', product.id) // No more null check needed
+              .eq('id', product.id)
               .select()
               .single();
 
-      return SupabaseProduct.fromJson(response);
+      final updatedProduct = SupabaseProduct.fromJson(response);
+
+      // Debug log - print what we got back
+      print('Response from Supabase update: $response');
+      print('Updated production value: ${updatedProduct.production}');
+
+      return updatedProduct;
     } catch (e) {
       debugPrint('Error updating product: $e');
       throw Exception('Failed to update product: $e');
@@ -188,7 +205,10 @@ class SupabaseProductRepository {
   // Delete a product
   Future<void> deleteProduct(int productId) async {
     try {
-      await _supabaseClient.from('all_products').delete().eq('id', productId);
+      await _supabaseClient
+          .from('pre_all_products')
+          .delete()
+          .eq('id', productId);
     } catch (e) {
       throw Exception('Failed to delete product: $e');
     }

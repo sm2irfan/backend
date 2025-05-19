@@ -60,6 +60,7 @@ class AddProductManager {
       editManager.matchingWordsController.text = '';
       editManager.imageUrlController.text = '';
       editManager.editPopular = false;
+      editManager.editProduction = false; // Initialize production field
     });
 
     // Scroll to top to see the new row
@@ -147,6 +148,7 @@ class AddProductManager {
               ? editManager.category2Controller.text
               : null,
       popularProduct: editManager.editPopular,
+      production: editManager.editProduction, // Add production field
       matchingWords:
           editManager.matchingWordsController.text.isNotEmpty
               ? editManager.matchingWordsController.text
@@ -241,6 +243,7 @@ class AddProductManager {
       popularProduct: product.popularProduct,
       matchingWords: product.matchingWords,
       image: product.image,
+      production: product.production, // Add production field
     );
 
     // Create the product in Supabase
@@ -248,7 +251,7 @@ class AddProductManager {
 
     // Log the result
     print(
-      'Product successfully created in Supabase with ID: ${createdProduct.id}',
+      'Product successfully created in Supabase with ID: ${createdProduct.id}, production: ${createdProduct.production}',
     );
 
     // Show success notification
@@ -373,10 +376,17 @@ class AddProductManager {
           });
         });
       case 11:
-        // Matching words
-        return editManager.buildEditableMatchingWordsCell();
+        // Production
+        return editManager.buildEditableProductionCell((value) {
+          onStateChanged(() {
+            editManager.editProduction = value ?? false;
+          });
+        });
       case 12:
-        // Actions
+        // Matching words (shifted)
+        return editManager.buildEditableMatchingWordsCell();
+      case 13:
+        // Actions (shifted)
         return editManager.buildEditableActionCell(
           () => saveNewProduct(context),
           cancelAddingNewProduct,

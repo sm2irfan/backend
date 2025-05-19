@@ -352,6 +352,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     'Category 1',
     'Category 2',
     'Popular',
+    'Production', // Add new column title
     'Matching Words',
     'Actions',
   ];
@@ -691,6 +692,8 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       case 10:
         return _buildPopularCell(product, isEditing);
       case 11:
+        return _buildProductionCell(product, isEditing); // Add production cell
+      case 12:
         return _buildMatchingWordsCell(
           product,
           columnIndex,
@@ -698,10 +701,25 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
           isMobile,
           textStyle,
         );
-      case 12:
+      case 13: // Shifted one index
         return _buildActionsCell(product, isEditing, isMobile);
       default:
         return const SizedBox();
+    }
+  }
+
+  // Add new build method for production cell
+  Widget _buildProductionCell(Product product, bool isEditing) {
+    if (isEditing) {
+      return _editManager.buildEditableProductionCell((value) {
+        setState(() {
+          _editManager.editProduction = value ?? false;
+        });
+      });
+    } else {
+      return product.production
+          ? const Icon(Icons.check_circle, color: Colors.green, size: 20)
+          : const SelectableText('-');
     }
   }
 
@@ -1071,6 +1089,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               ? _editManager.category2Controller.text
               : null,
       popularProduct: _editManager.editPopular,
+      production: _editManager.editProduction, // Add production value
       matchingWords:
           _editManager.matchingWordsController.text.isNotEmpty
               ? _editManager.matchingWordsController.text
@@ -1147,6 +1166,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       category2: updatedProduct.category2,
       popularProduct: updatedProduct.popularProduct,
       matchingWords: updatedProduct.matchingWords,
+      production: updatedProduct.production, // Include the production field
     );
 
     // Update in Supabase
@@ -1154,6 +1174,10 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         .updateProduct(supabaseProduct)
         .then((updatedSupabaseProduct) {
           print('Product successfully updated in Supabase');
+          // Log the updated values for debugging
+          print(
+            'Updated values in Supabase: production=${updatedSupabaseProduct.production}',
+          );
 
           // Remove this product from error tracking if it was there
           setState(() {

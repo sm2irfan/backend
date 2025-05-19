@@ -578,6 +578,18 @@ class ProductDetailScreen extends StatelessWidget {
                           backgroundColor: Colors.amber,
                           labelStyle: TextStyle(color: Colors.white),
                         ),
+                      const SizedBox(width: 8),
+                      if (product.production)
+                        Chip(
+                          label: const Text('Production'),
+                          avatar: const Icon(
+                            Icons.check_circle,
+                            size: 16,
+                            color: Colors.green,
+                          ),
+                          backgroundColor: Colors.green.withOpacity(0.2),
+                          labelStyle: const TextStyle(color: Colors.green),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),

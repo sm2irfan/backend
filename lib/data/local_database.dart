@@ -125,9 +125,12 @@ Then restart the application.
       final String path = await getDatabasesPath();
       final String dbPath = join(path, 'product_database.db');
 
+      // Log the database file path
+      developer.log('Database path: $dbPath');
+
       return await openDatabase(
         dbPath,
-        version: 2, // Increased version number for migration
+        version: 3, // Increment version for migration
         onCreate: (db, version) async {
           await db.execute('''
           CREATE TABLE all_products(
@@ -142,7 +145,8 @@ Then restart the application.
             category_1 TEXT,
             category_2 TEXT,
             popular_product INTEGER,
-            matching_words TEXT
+            matching_words TEXT,
+            production INTEGER DEFAULT 0
           )
           ''');
 
@@ -158,61 +162,28 @@ Then restart the application.
           ''');
         },
         onUpgrade: (db, oldVersion, newVersion) async {
-          if (oldVersion < 2) {
-            // Add column_visibility table if upgrading from version 1
-            await db.execute('''
-            CREATE TABLE IF NOT EXISTS column_visibility(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              view_name TEXT NOT NULL,
-              column_index INTEGER NOT NULL,
-              is_visible INTEGER NOT NULL,
-              UNIQUE(view_name, column_index)
-            )
-            ''');
+          // Handle upgrades
+          if (oldVersion < 3) {
+            // Check if production column exists, add if not
+            var columns = await db.rawQuery('PRAGMA table_info(all_products)');
+            var columnNames = columns.map((c) => c['name'] as String).toList();
+
+            if (!columnNames.contains('production')) {
+              await db.execute(
+                'ALTER TABLE all_products ADD COLUMN production INTEGER DEFAULT 0',
+              );
+              developer.log('Added production column to all_products table');
+            }
           }
+
+          // Other migration code
+          // ...existing code...
         },
       );
     } catch (e) {
       developer.log('Error initializing database: $e');
       _sqliteAvailable = false;
       throw SqliteNotAvailableException('Failed to initialize SQLite: $e');
-    }
-  }
-
-  // Create tables in the database
-  Future<void> _createDatabase(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS all_products(
-        id INTEGER PRIMARY KEY,
-        created_at TEXT,
-        updated_at TEXT,
-        name TEXT NOT NULL,
-        uprices TEXT NOT NULL,
-        image TEXT,
-        discount INTEGER,
-        description TEXT,
-        category_1 TEXT,
-        category_2 TEXT,
-        popular_product INTEGER NOT NULL,
-        matching_words TEXT
-      )
-    ''');
-  }
-
-  // Add migration function for database upgrades
-  Future<void> _upgradeDatabase(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
-    if (oldVersion < 2) {
-      // Check if the column exists before adding it to avoid errors
-      var columns = await db.rawQuery('PRAGMA table_info(all_products)');
-      var columnNames = columns.map((c) => c['name'] as String).toList();
-
-      if (!columnNames.contains('updated_at')) {
-        await db.execute('ALTER TABLE all_products ADD COLUMN updated_at TEXT');
-      }
     }
   }
 
@@ -266,7 +237,8 @@ Then restart the application.
         await txn.execute('DELETE FROM all_products');
 
         // Fetch all products from Supabase
-        final response = await _supabaseClient.from('all_products').select();
+        final response =
+            await _supabaseClient.from('pre_all_products').select();
 
         // Insert each product into SQLite
         int successCount = 0;
@@ -276,6 +248,10 @@ Then restart the application.
           try {
             // Convert bool to int for SQLite
             final popularProductInt = item['popular_product'] == true ? 1 : 0;
+            final productionInt =
+                item['production'] == true
+                    ? 1
+                    : 0; // Convert production boolean to int
 
             await txn.insert('all_products', {
               'id': item['id'],
@@ -292,6 +268,7 @@ Then restart the application.
               'category_2': item['category_2'],
               'popular_product': popularProductInt,
               'matching_words': item['matching_words'],
+              'production': productionInt, // Add production field
             }, conflictAlgorithm: ConflictAlgorithm.replace);
             successCount++;
           } catch (e) {
@@ -480,6 +457,9 @@ Then restart the application.
         try {
           // Convert SQLite bool (stored as int) back to bool for Product class
           final bool popularProduct = (json['popular_product'] as int?) == 1;
+          final bool production =
+              (json['production'] as int?) ==
+              1; // Convert production int to boolean
 
           // Parse the updated_at field
           DateTime? updatedAt;
@@ -508,6 +488,7 @@ Then restart the application.
             category2: json['category_2'] as String?,
             popularProduct: popularProduct,
             matchingWords: json['matching_words'] as String?,
+            production: production, // Add production field
           );
           products.add(product);
         } catch (parseError) {
@@ -547,6 +528,8 @@ Then restart the application.
 
       // Convert bool to int for SQLite
       final popularProductInt = product.popularProduct ? 1 : 0;
+      final productionInt =
+          product.production ? 1 : 0; // Convert production boolean to int
 
       // Update the record in the database
       final rowsAffected = await db.update(
@@ -562,6 +545,7 @@ Then restart the application.
           'popular_product': popularProductInt,
           'matching_words': product.matchingWords,
           'updated_at': product.updatedAt?.toIso8601String(),
+          'production': productionInt, // Add production field
         },
         where: 'id = ?',
         whereArgs: [product.id],
@@ -612,6 +596,8 @@ Then restart the application.
 
       // Convert bool to int for SQLite
       final popularProductInt = product.popularProduct ? 1 : 0;
+      final productionInt =
+          product.production ? 1 : 0; // Convert production boolean to int
 
       // Insert the new product into the database
       final id = await db.insert('all_products', {
@@ -627,6 +613,7 @@ Then restart the application.
         'category_2': product.category2,
         'popular_product': popularProductInt,
         'matching_words': product.matchingWords,
+        'production': productionInt, // Add production field
       }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       return id > 0;

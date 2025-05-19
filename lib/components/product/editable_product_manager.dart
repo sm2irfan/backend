@@ -16,6 +16,7 @@ class EditableProductManager {
   final TextEditingController imageUrlController =
       TextEditingController(); // Add image URL controller
   bool editPopular = false;
+  bool editProduction = false; // Add production field
 
   void startEditing(Product product) {
     editingProduct = product;
@@ -29,6 +30,7 @@ class EditableProductManager {
     imageUrlController.text =
         product.image ?? ''; // Initialize image URL controller
     editPopular = product.popularProduct;
+    editProduction = product.production; // Initialize production value
   }
 
   void cancelEditing() {
@@ -204,6 +206,10 @@ class EditableProductManager {
 
   Widget buildEditablePopularCell(Function(bool?) onChanged) {
     return Checkbox(value: editPopular, onChanged: onChanged);
+  }
+
+  Widget buildEditableProductionCell(Function(bool?) onChanged) {
+    return Checkbox(value: editProduction, onChanged: onChanged);
   }
 
   Widget buildEditableActionCell(VoidCallback onSave, VoidCallback onCancel) {

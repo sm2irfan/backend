@@ -21,6 +21,7 @@ class Product extends Equatable {
   final String? category2; // Direct field instead of map
   final bool popularProduct;
   final String? matchingWords;
+  final bool production; // Add production field
 
   const Product({
     required this.id,
@@ -35,6 +36,7 @@ class Product extends Equatable {
     this.category2, // Changed to optional direct fields
     required this.popularProduct,
     this.matchingWords,
+    this.production = false, // Default to false if not provided
   });
 
   // Get all non-null categories as a list
@@ -82,6 +84,8 @@ class Product extends Equatable {
             json['category_2'] as String?, // Direct access to category fields
         popularProduct: json['popular_product'] as bool? ?? false,
         matchingWords: json['matching_words'] as String?,
+        production:
+            json['production'] as bool? ?? false, // Add production field
       );
     } catch (e) {
       rethrow;
@@ -92,16 +96,17 @@ class Product extends Equatable {
   List<Object?> get props => [
     id,
     createdAt,
-    updatedAt, // Add updatedAt to props
+    updatedAt,
     name,
     uPrices,
     image,
     discount,
     description,
-    category1, // Updated props list
-    category2, // Updated props list
+    category1,
+    category2,
     popularProduct,
     matchingWords,
+    production, // Add to props list
   ];
 }
 
@@ -123,6 +128,7 @@ class ProductRepository {
         filters: filters,
       );
     } catch (e) {
+      print('Failed to load products: $e');
       throw Exception('Failed to load products: $e');
     }
   }
