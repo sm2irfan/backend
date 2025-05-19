@@ -465,7 +465,18 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               children: [
                 Row(
                   children: [
-                    const SyncProductsButton(),
+                    SyncProductsButton(
+                      onSyncCompleted: () {
+                        // Refresh the product list by dispatching an event to the bloc
+                        final productBloc = BlocProvider.of<ProductBloc>(context);
+                        productBloc.add(
+                          RefreshCurrentPage(
+                            currentPage: widget.currentPage,
+                            pageSize: widget.pageSize,
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(width: 8),
                     // Replace the Add Product button with the one from the manager
                     _addProductManager.buildAddProductButton(),

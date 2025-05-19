@@ -3,7 +3,13 @@ import 'dart:io' show Platform;
 import '../../data/local_database.dart';
 
 class SyncProductsButton extends StatefulWidget {
-  const SyncProductsButton({super.key});
+  /// Callback function to refresh UI data after sync completes successfully
+  final VoidCallback? onSyncCompleted;
+  
+  const SyncProductsButton({
+    super.key,
+    this.onSyncCompleted,
+  });
 
   @override
   State<SyncProductsButton> createState() => _SyncProductsButtonState();
@@ -12,7 +18,7 @@ class SyncProductsButton extends StatefulWidget {
 class _SyncProductsButtonState extends State<SyncProductsButton> {
   bool _isSyncing = false;
 
-  Future<void> _syncProducts() async {
+  Future<void> _syncProducts({bool initialSync = false}) async {
     if (_isSyncing) return;
 
     setState(() {
@@ -33,7 +39,15 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
         return;
       }
 
-      final result = await db.syncProductsFromSupabase();
+      // Get last sync time for display
+      final lastSyncTime = await db.getConfigValue('last_sync_pre_all_products');
+      final String syncTypeInfo = initialSync ? 'Full Initial Sync' : 'Incremental Sync';
+      final String syncTimeInfo = lastSyncTime != null 
+          ? 'Last sync: ${_formatDateTime(lastSyncTime)}'
+          : 'First sync';
+      
+      // Perform sync operation
+      final result = await db.syncProductsFromSupabase(initialSync: initialSync);
 
       if (!mounted) return;
 
@@ -52,12 +66,22 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
           ),
         );
       } else {
+        // Show more detailed sync info
+        final String syncMessage = result['success'] 
+            ? '${result['message']} ($syncTimeInfo, $syncTypeInfo)'
+            : result['message'];
+            
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message']),
+            content: Text(syncMessage),
             backgroundColor: result['success'] ? Colors.green : Colors.red,
           ),
         );
+        
+        // Call the callback to refresh data if sync was successful
+        if (result['success'] && widget.onSyncCompleted != null) {
+          widget.onSyncCompleted!();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -140,27 +164,55 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
     );
   }
 
+  // Helper method to format ISO date string to a more readable format
+  String _formatDateTime(String isoString) {
+    try {
+      final dateTime = DateTime.parse(isoString);
+      return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} '
+          '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: ElevatedButton.icon(
-        onPressed: _isSyncing ? null : _syncProducts,
-        icon:
-            _isSyncing
-                ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2.0),
-                )
-                : const Icon(Icons.sync),
-        label: Text(_isSyncing ? 'Syncing...' : 'Sync All Products table'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    return Row(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: ElevatedButton.icon(
+            onPressed: _isSyncing ? null : () => _syncProducts(),
+            icon:
+                _isSyncing
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.0),
+                    )
+                    : const Icon(Icons.sync),
+            label: Text(_isSyncing ? 'Syncing...' : 'Quick Sync'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: ElevatedButton.icon(
+            onPressed: _isSyncing ? null : () => _syncProducts(initialSync: true),
+            icon: const Icon(Icons.sync_problem),
+            label: const Text('Full Sync'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade700,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

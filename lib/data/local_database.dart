@@ -124,13 +124,13 @@ Then restart the application.
     try {
       final String path = await getDatabasesPath();
       final String dbPath = join(path, 'product_database.db');
-
+      
       // Log the database file path
       developer.log('Database path: $dbPath');
 
       return await openDatabase(
         dbPath,
-        version: 3, // Increment version for migration
+        version: 4, // Increment version for migration to add config table
         onCreate: (db, version) async {
           await db.execute('''
           CREATE TABLE all_products(
@@ -147,6 +147,14 @@ Then restart the application.
             popular_product INTEGER,
             matching_words TEXT,
             production INTEGER DEFAULT 0
+          )
+          ''');
+
+          // Create config table for app configuration
+          await db.execute('''
+          CREATE TABLE config(
+            key TEXT PRIMARY KEY,
+            value TEXT
           )
           ''');
 
@@ -175,15 +183,72 @@ Then restart the application.
               developer.log('Added production column to all_products table');
             }
           }
-
-          // Other migration code
-          // ...existing code...
+          
+          if (oldVersion < 4) {
+            // Add config table if upgrading from version < 4
+            try {
+              await db.execute('''
+              CREATE TABLE IF NOT EXISTS config(
+                key TEXT PRIMARY KEY,
+                value TEXT
+              )
+              ''');
+              developer.log('Added config table to database');
+            } catch (e) {
+              developer.log('Error adding config table: $e');
+            }
+          }
         },
       );
     } catch (e) {
       developer.log('Error initializing database: $e');
       _sqliteAvailable = false;
       throw SqliteNotAvailableException('Failed to initialize SQLite: $e');
+    }
+  }
+
+  // Get a configuration value from the config table
+  Future<String?> getConfigValue(String key) async {
+    if (!await isSqliteAvailable()) {
+      return null;
+    }
+
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> result = await db.query(
+        'config',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+
+      if (result.isNotEmpty) {
+        return result.first['value'] as String?;
+      }
+      return null;
+    } catch (e) {
+      developer.log('Error getting config value: $e');
+      return null;
+    }
+  }
+
+  // Set a configuration value in the config table
+  Future<bool> setConfigValue(String key, String value) async {
+    if (!await isSqliteAvailable()) {
+      return false;
+    }
+
+    try {
+      final db = await database;
+      await db.insert(
+        'config',
+        {'key': key, 'value': value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return true;
+    } catch (e) {
+      developer.log('Error setting config value: $e');
+      return false;
     }
   }
 
@@ -224,23 +289,61 @@ Then restart the application.
   }
 
   // Safe version of syncProductsFromSupabase that checks SQLite availability first
-  Future<Map<String, dynamic>> syncProductsFromSupabase() async {
+  Future<Map<String, dynamic>> syncProductsFromSupabase({bool initialSync = false}) async {
     if (!await isSqliteAvailable()) {
       return simulateSyncOperation();
     }
 
     try {
       final db = await database;
+      
+      // Get the last sync time from config
+      String? lastSyncTime = await getConfigValue('last_sync_pre_all_products');
+      developer.log('Last sync time: ${lastSyncTime ?? "Never"}');
+
+      // Store sync timestamp outside of transaction
+      final now = DateTime.now().toUtc().toIso8601String();
+      String message = '';
+      int count = 0;
+
       // Begin transaction
       await db.transaction((txn) async {
-        // Clear existing data if any
-        await txn.execute('DELETE FROM all_products');
+        // Determine if this is first sync or incremental sync
+        bool isFirstSync = lastSyncTime == null || lastSyncTime.isEmpty;
+        
+        // Build the appropriate query based on sync type
+        List<Map<String, dynamic>> response;
+        
+        if (isFirstSync) {
+          if (initialSync) {
+            // First sync - clear existing data and fetch all records
+            developer.log('Performing full initial sync');
+            await txn.execute('DELETE FROM all_products');
+            
+            // Fetch all records without any filters
+            response = await _supabaseClient.from('pre_all_products').select();
+          } else {
+            // First sync but we want to limit the number of records
+            // Get most recent records (last 50)
+            developer.log('Performing limited initial sync (most recent 50 records)');
+            response = await _supabaseClient
+                .from('pre_all_products')
+                .select()
+                .order('created_at', ascending: false)
+                .limit(50);
+          }
+        } else {
+          // Incremental sync - only get records updated since last sync
+          developer.log('Syncing only records updated since: $lastSyncTime');
+          response = await _supabaseClient
+              .from('pre_all_products')
+              .select()
+              .gte('updated_at', lastSyncTime);
+        }
+        
+        developer.log('Got ${response.length} records from Supabase');
 
-        // Fetch all products from Supabase
-        final response =
-            await _supabaseClient.from('pre_all_products').select();
-
-        // Insert each product into SQLite
+        // Insert or update each product into SQLite
         int successCount = 0;
         int failCount = 0;
 
@@ -248,46 +351,59 @@ Then restart the application.
           try {
             // Convert bool to int for SQLite
             final popularProductInt = item['popular_product'] == true ? 1 : 0;
-            final productionInt =
-                item['production'] == true
-                    ? 1
-                    : 0; // Convert production boolean to int
+            final productionInt = item['production'] == true ? 1 : 0;
 
-            await txn.insert('all_products', {
-              'id': item['id'],
-              'created_at':
-                  item['created_at'] ?? DateTime.now().toIso8601String(),
-              'updated_at':
-                  item['updated_at'] ?? DateTime.now().toIso8601String(),
-              'name': item['name'] ?? 'Unnamed Product',
-              'uprices': item['uprices']?.toString() ?? '0',
-              'image': item['image'],
-              'discount': item['discount'],
-              'description': item['description'],
-              'category_1': item['category_1'],
-              'category_2': item['category_2'],
-              'popular_product': popularProductInt,
-              'matching_words': item['matching_words'],
-              'production': productionInt, // Add production field
-            }, conflictAlgorithm: ConflictAlgorithm.replace);
+            // Use insert with REPLACE conflict strategy
+            await txn.insert(
+              'all_products',
+              {
+                'id': item['id'],
+                'created_at': item['created_at'] ?? DateTime.now().toIso8601String(),
+                'updated_at': item['updated_at'] ?? DateTime.now().toIso8601String(),
+                'name': item['name'] ?? 'Unnamed Product',
+                'uprices': item['uprices']?.toString() ?? '0',
+                'image': item['image'],
+                'discount': item['discount'],
+                'description': item['description'],
+                'category_1': item['category_1'],
+                'category_2': item['category_2'],
+                'popular_product': popularProductInt,
+                'matching_words': item['matching_words'],
+                'production': productionInt,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
             successCount++;
           } catch (e) {
-            developer.log('Error inserting product: $e');
+            developer.log('Error inserting/updating product: $e');
             failCount++;
           }
         }
+        
+        // Update the config table directly using the transaction object
+        await txn.insert(
+          'config',
+          {'key': 'last_sync_pre_all_products', 'value': now},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        
+        message = 'Synced ${response.length} records (S:$successCount, F:$failCount)';
+        developer.log('Updated last sync time to: $now');
       });
 
-      // Get count of records after transaction
+      // Get count of records after sync
       final countResult = await db.rawQuery(
         'SELECT COUNT(*) as count FROM all_products',
       );
-      final count = Sqflite.firstIntValue(countResult) ?? 0;
+      count = Sqflite.firstIntValue(countResult) ?? 0;
 
+      developer.log('Sync completed: $count total records in database');
+      
       return {
         'success': true,
-        'message': 'Synced $count products from Supabase to SQLite',
+        'message': message,
         'count': count,
+        'totalCount': count, // Total count in database
       };
     } catch (e) {
       developer.log('Error syncing products: $e');
