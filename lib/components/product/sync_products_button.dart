@@ -5,11 +5,8 @@ import '../../data/local_database.dart';
 class SyncProductsButton extends StatefulWidget {
   /// Callback function to refresh UI data after sync completes successfully
   final VoidCallback? onSyncCompleted;
-  
-  const SyncProductsButton({
-    super.key,
-    this.onSyncCompleted,
-  });
+
+  const SyncProductsButton({super.key, this.onSyncCompleted});
 
   @override
   State<SyncProductsButton> createState() => _SyncProductsButtonState();
@@ -40,14 +37,20 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
       }
 
       // Get last sync time for display
-      final lastSyncTime = await db.getConfigValue('last_sync_pre_all_products');
-      final String syncTypeInfo = initialSync ? 'Full Initial Sync' : 'Incremental Sync';
-      final String syncTimeInfo = lastSyncTime != null 
-          ? 'Last sync: ${_formatDateTime(lastSyncTime)}'
-          : 'First sync';
-      
+      final lastSyncTime = await db.getConfigValue(
+        'last_sync_pre_all_products',
+      );
+      final String syncTypeInfo =
+          initialSync ? 'Full Initial Sync' : 'Incremental Sync';
+      final String syncTimeInfo =
+          lastSyncTime != null
+              ? 'Last sync: ${_formatDateTime(lastSyncTime)}'
+              : 'First sync';
+
       // Perform sync operation
-      final result = await db.syncProductsFromSupabase(initialSync: initialSync);
+      final result = await db.syncProductsFromSupabase(
+        initialSync: initialSync,
+      );
 
       if (!mounted) return;
 
@@ -67,17 +70,18 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
         );
       } else {
         // Show more detailed sync info
-        final String syncMessage = result['success'] 
-            ? '${result['message']} ($syncTimeInfo, $syncTypeInfo)'
-            : result['message'];
-            
+        final String syncMessage =
+            result['success']
+                ? '${result['message']} ($syncTimeInfo, $syncTypeInfo)'
+                : result['message'];
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(syncMessage),
             backgroundColor: result['success'] ? Colors.green : Colors.red,
           ),
         );
-        
+
         // Call the callback to refresh data if sync was successful
         if (result['success'] && widget.onSyncCompleted != null) {
           widget.onSyncCompleted!();
@@ -202,7 +206,8 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: ElevatedButton.icon(
-            onPressed: _isSyncing ? null : () => _syncProducts(initialSync: true),
+            onPressed:
+                _isSyncing ? null : () => _syncProducts(initialSync: true),
             icon: const Icon(Icons.sync_problem),
             label: const Text('Full Sync'),
             style: ElevatedButton.styleFrom(

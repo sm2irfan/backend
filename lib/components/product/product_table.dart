@@ -468,7 +468,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                     SyncProductsButton(
                       onSyncCompleted: () {
                         // Refresh the product list by dispatching an event to the bloc
-                        final productBloc = BlocProvider.of<ProductBloc>(context);
+                        final productBloc = BlocProvider.of<ProductBloc>(
+                          context,
+                        );
                         productBloc.add(
                           RefreshCurrentPage(
                             currentPage: widget.currentPage,

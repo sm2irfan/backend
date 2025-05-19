@@ -124,7 +124,7 @@ Then restart the application.
     try {
       final String path = await getDatabasesPath();
       final String dbPath = join(path, 'product_database.db');
-      
+
       // Log the database file path
       developer.log('Database path: $dbPath');
 
@@ -183,7 +183,7 @@ Then restart the application.
               developer.log('Added production column to all_products table');
             }
           }
-          
+
           if (oldVersion < 4) {
             // Add config table if upgrading from version < 4
             try {
@@ -240,11 +240,10 @@ Then restart the application.
 
     try {
       final db = await database;
-      await db.insert(
-        'config',
-        {'key': key, 'value': value},
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('config', {
+        'key': key,
+        'value': value,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       return true;
     } catch (e) {
       developer.log('Error setting config value: $e');
@@ -289,14 +288,16 @@ Then restart the application.
   }
 
   // Safe version of syncProductsFromSupabase that checks SQLite availability first
-  Future<Map<String, dynamic>> syncProductsFromSupabase({bool initialSync = false}) async {
+  Future<Map<String, dynamic>> syncProductsFromSupabase({
+    bool initialSync = false,
+  }) async {
     if (!await isSqliteAvailable()) {
       return simulateSyncOperation();
     }
 
     try {
       final db = await database;
-      
+
       // Get the last sync time from config
       String? lastSyncTime = await getConfigValue('last_sync_pre_all_products');
       developer.log('Last sync time: ${lastSyncTime ?? "Never"}');
@@ -310,22 +311,24 @@ Then restart the application.
       await db.transaction((txn) async {
         // Determine if this is first sync or incremental sync
         bool isFirstSync = lastSyncTime == null || lastSyncTime.isEmpty;
-        
+
         // Build the appropriate query based on sync type
         List<Map<String, dynamic>> response;
-        
+
         if (isFirstSync) {
           if (initialSync) {
             // First sync - clear existing data and fetch all records
             developer.log('Performing full initial sync');
             await txn.execute('DELETE FROM all_products');
-            
+
             // Fetch all records without any filters
             response = await _supabaseClient.from('pre_all_products').select();
           } else {
             // First sync but we want to limit the number of records
             // Get most recent records (last 50)
-            developer.log('Performing limited initial sync (most recent 50 records)');
+            developer.log(
+              'Performing limited initial sync (most recent 50 records)',
+            );
             response = await _supabaseClient
                 .from('pre_all_products')
                 .select()
@@ -340,7 +343,7 @@ Then restart the application.
               .select()
               .gte('updated_at', lastSyncTime);
         }
-        
+
         developer.log('Got ${response.length} records from Supabase');
 
         // Insert or update each product into SQLite
@@ -354,40 +357,38 @@ Then restart the application.
             final productionInt = item['production'] == true ? 1 : 0;
 
             // Use insert with REPLACE conflict strategy
-            await txn.insert(
-              'all_products',
-              {
-                'id': item['id'],
-                'created_at': item['created_at'] ?? DateTime.now().toIso8601String(),
-                'updated_at': item['updated_at'] ?? DateTime.now().toIso8601String(),
-                'name': item['name'] ?? 'Unnamed Product',
-                'uprices': item['uprices']?.toString() ?? '0',
-                'image': item['image'],
-                'discount': item['discount'],
-                'description': item['description'],
-                'category_1': item['category_1'],
-                'category_2': item['category_2'],
-                'popular_product': popularProductInt,
-                'matching_words': item['matching_words'],
-                'production': productionInt,
-              },
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
+            await txn.insert('all_products', {
+              'id': item['id'],
+              'created_at':
+                  item['created_at'] ?? DateTime.now().toIso8601String(),
+              'updated_at':
+                  item['updated_at'] ?? DateTime.now().toIso8601String(),
+              'name': item['name'] ?? 'Unnamed Product',
+              'uprices': item['uprices']?.toString() ?? '0',
+              'image': item['image'],
+              'discount': item['discount'],
+              'description': item['description'],
+              'category_1': item['category_1'],
+              'category_2': item['category_2'],
+              'popular_product': popularProductInt,
+              'matching_words': item['matching_words'],
+              'production': productionInt,
+            }, conflictAlgorithm: ConflictAlgorithm.replace);
             successCount++;
           } catch (e) {
             developer.log('Error inserting/updating product: $e');
             failCount++;
           }
         }
-        
+
         // Update the config table directly using the transaction object
-        await txn.insert(
-          'config',
-          {'key': 'last_sync_pre_all_products', 'value': now},
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-        
-        message = 'Synced ${response.length} records (S:$successCount, F:$failCount)';
+        await txn.insert('config', {
+          'key': 'last_sync_pre_all_products',
+          'value': now,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+        message =
+            'Synced ${response.length} records (S:$successCount, F:$failCount)';
         developer.log('Updated last sync time to: $now');
       });
 
@@ -398,7 +399,7 @@ Then restart the application.
       count = Sqflite.firstIntValue(countResult) ?? 0;
 
       developer.log('Sync completed: $count total records in database');
-      
+
       return {
         'success': true,
         'message': message,
