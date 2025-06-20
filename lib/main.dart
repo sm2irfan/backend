@@ -35,6 +35,9 @@ class AppRoot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = Supabase.instance.client.auth.currentSession;
+    final bool isLoggedIn = session != null;
+
     return MaterialApp(
       title: 'Product Management App',
       theme: ThemeData(
@@ -48,18 +51,14 @@ class AppRoot extends StatelessWidget {
         ),
       ),
       debugShowCheckedModeBanner: false,
-
-      // Single root navigator and no nested navigators
-      initialRoute: AppRoutes.login,
-
+      // Set initialRoute based on login state
+      initialRoute: isLoggedIn ? AppRoutes.products : AppRoutes.login,
       routes: {
         AppRoutes.home: (context) => const ProductDashboard(),
         AppRoutes.products: (context) => const ProductDashboard(),
         AppRoutes.imageUpload: (context) => const ImageUploadPage(),
         AppRoutes.login: (context) => const LoginPage(),
       },
-
-      // Handle any named routes that might not be defined
       onGenerateRoute: (settings) {
         switch (settings.name) {
           case AppRoutes.products:
@@ -70,8 +69,6 @@ class AppRoot extends StatelessWidget {
             return MaterialPageRoute(builder: (_) => const ProductDashboard());
         }
       },
-
-      // Fallback route
       onUnknownRoute: (_) {
         return MaterialPageRoute(builder: (_) => const ProductDashboard());
       },

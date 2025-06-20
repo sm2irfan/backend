@@ -186,26 +186,6 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: ElevatedButton.icon(
-            onPressed: _isSyncing ? null : () => _syncProducts(),
-            icon:
-                _isSyncing
-                    ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.0),
-                    )
-                    : const Icon(Icons.sync),
-            label: Text(_isSyncing ? 'Syncing...' : 'Quick Sync'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: ElevatedButton.icon(
             onPressed:
                 _isSyncing ? null : () => _syncProducts(initialSync: true),
             icon: const Icon(Icons.sync_problem),
