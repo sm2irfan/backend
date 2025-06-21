@@ -16,14 +16,13 @@ class ProductValidators {
     "Snacks and Instant Foods",
     "Biscuits and Crackers",
     "Chocolates and Confectionery",
-    "Ready-to-Eat",
-    "Health & Nutrition",
-    "Household Cleaning",
+    "Household Cleaning and Tissues",
     "Baby Care",
-    "Personal Care",
+    "Personal Care and Cosmetics",
     "Frozen Foods",
-    "Tissues and Disposables",
     "Stationery Items",
+    "Home Appliances",
+    "Lighting and Decor",
     "Others",
   ];
 
