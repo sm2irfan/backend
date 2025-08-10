@@ -14,7 +14,7 @@ class ProductValidators {
     "Dairy and Alternatives",
     "Beverages",
     "Snacks and Instant Foods",
-    "Biscuits and Crackers",
+    "Biscuits and Cakes",
     "Chocolates and Confectionery",
     "Household Cleaning and Tissues",
     "Baby Care",
