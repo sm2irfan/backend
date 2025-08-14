@@ -162,7 +162,7 @@ class AddProductManager {
 
     // Check internet connectivity BEFORE saving
     final hasConnection = await ConnectivityHelper.hasInternetConnection();
-    
+
     if (!hasConnection) {
       // Show connectivity error with options
       _showNewProductConnectivityDialog(context, newProduct);
@@ -232,7 +232,10 @@ class AddProductManager {
   }
 
   // Show dialog with options when no internet connection for new product
-  void _showNewProductConnectivityDialog(BuildContext context, Product newProduct) {
+  void _showNewProductConnectivityDialog(
+    BuildContext context,
+    Product newProduct,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -285,7 +288,10 @@ class AddProductManager {
   }
 
   // Save new product locally only (when user chooses to save without internet)
-  Future<void> _proceedWithLocalNewProductOnly(BuildContext context, Product newProduct) async {
+  Future<void> _proceedWithLocalNewProductOnly(
+    BuildContext context,
+    Product newProduct,
+  ) async {
     try {
       // Save only to local database with temporary ID
       final success = await _saveProductToLocalDatabase(context, newProduct);
@@ -302,7 +308,9 @@ class AddProductManager {
         // Show warning message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('New product saved locally: ${newProduct.name} (will sync when connected)'),
+            content: Text(
+              'New product saved locally: ${newProduct.name} (will sync when connected)',
+            ),
             backgroundColor: Colors.orange,
           ),
         );

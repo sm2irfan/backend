@@ -11,7 +11,7 @@ class ConnectivityHelper {
     try {
       // First check connectivity status
       final connectivityResult = await _connectivity.checkConnectivity();
-      
+
       // If no connectivity, return false immediately
       if (connectivityResult.contains(ConnectivityResult.none)) {
         return false;
@@ -51,8 +51,8 @@ class ConnectivityHelper {
             ],
           ),
           content: Text(
-            customMessage ?? 
-            'No internet connection detected. Please check your network settings and try again.',
+            customMessage ??
+                'No internet connection detected. Please check your network settings and try again.',
           ),
           actions: [
             TextButton(
@@ -91,9 +91,7 @@ class ConnectivityHelper {
             const Icon(Icons.wifi_off, color: Colors.white),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                customMessage ?? 'No internet connection detected',
-              ),
+              child: Text(customMessage ?? 'No internet connection detected'),
             ),
           ],
         ),

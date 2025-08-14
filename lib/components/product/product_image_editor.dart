@@ -260,13 +260,14 @@ class _ProductImageEditorDialogState extends State<_ProductImageEditorDialog> {
 
     // Check internet connectivity before uploading
     final hasConnection = await ConnectivityHelper.hasInternetConnection();
-    
+
     if (!hasConnection) {
       // Show connectivity error with retry option
       ConnectivityHelper.showConnectivityError(
         context,
         onRetry: () => _uploadImage(),
-        customMessage: 'Unable to upload image to cloud storage. Please check your internet connection and try again.',
+        customMessage:
+            'Unable to upload image to cloud storage. Please check your internet connection and try again.',
       );
       return;
     }

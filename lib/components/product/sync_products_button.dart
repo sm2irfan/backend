@@ -26,14 +26,15 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
     try {
       // Check internet connectivity before attempting to sync
       final hasConnection = await ConnectivityHelper.hasInternetConnection();
-      
+
       if (!hasConnection) {
         // Show connectivity error with retry option
         if (mounted) {
           ConnectivityHelper.showConnectivityError(
             context,
             onRetry: () => _syncProducts(initialSync: initialSync),
-            customMessage: 'Unable to sync products from cloud. Please check your internet connection and try again.',
+            customMessage:
+                'Unable to sync products from cloud. Please check your internet connection and try again.',
           );
           setState(() {
             _isSyncing = false;

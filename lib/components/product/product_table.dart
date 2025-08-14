@@ -1086,7 +1086,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
     // Check internet connectivity BEFORE saving locally
     final hasConnection = await ConnectivityHelper.hasInternetConnection();
-    
+
     if (!hasConnection) {
       // Show connectivity error with options
       _showConnectivityOptionsDialog(originalProduct, priceValue);
@@ -1098,7 +1098,10 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   // Show dialog with options when no internet connection
-  void _showConnectivityOptionsDialog(Product originalProduct, String priceValue) {
+  void _showConnectivityOptionsDialog(
+    Product originalProduct,
+    String priceValue,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1151,7 +1154,10 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   // Proceed with save and sync (when internet is available)
-  Future<void> _proceedWithSave(Product originalProduct, String priceValue) async {
+  Future<void> _proceedWithSave(
+    Product originalProduct,
+    String priceValue,
+  ) async {
     final updatedProduct = _buildUpdatedProduct(originalProduct, priceValue);
 
     // Update the product in the products list for UI refresh
@@ -1166,11 +1172,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     final LocalDatabase localDB = LocalDatabase();
     try {
       final success = await localDB.updateProduct(updatedProduct);
-      
+
       if (success) {
         // Sync to Supabase since we know we have internet
         _updateToSupabase(updatedProduct);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Saved and synced: ${updatedProduct.name}'),
@@ -1204,7 +1210,10 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   // Save locally only (when user chooses to save without internet)
-  Future<void> _proceedWithLocalSaveOnly(Product originalProduct, String priceValue) async {
+  Future<void> _proceedWithLocalSaveOnly(
+    Product originalProduct,
+    String priceValue,
+  ) async {
     final updatedProduct = _buildUpdatedProduct(originalProduct, priceValue);
 
     // Update the product in the products list for UI refresh
@@ -1221,11 +1230,13 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     final LocalDatabase localDB = LocalDatabase();
     try {
       final success = await localDB.updateProduct(updatedProduct);
-      
+
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved locally: ${updatedProduct.name} (will sync when connected)'),
+            content: Text(
+              'Saved locally: ${updatedProduct.name} (will sync when connected)',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
