@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
+import 'connectivity_helper.dart';
 import '../../data/local_database.dart';
 
 class SyncProductsButton extends StatefulWidget {
@@ -23,6 +24,24 @@ class _SyncProductsButtonState extends State<SyncProductsButton> {
     });
 
     try {
+      // Check internet connectivity before attempting to sync
+      final hasConnection = await ConnectivityHelper.hasInternetConnection();
+      
+      if (!hasConnection) {
+        // Show connectivity error with retry option
+        if (mounted) {
+          ConnectivityHelper.showConnectivityError(
+            context,
+            onRetry: () => _syncProducts(initialSync: initialSync),
+            customMessage: 'Unable to sync products from cloud. Please check your internet connection and try again.',
+          );
+          setState(() {
+            _isSyncing = false;
+          });
+        }
+        return;
+      }
+
       final LocalDatabase db = LocalDatabase();
       bool sqliteAvailable = await LocalDatabase.isSqliteAvailable();
 

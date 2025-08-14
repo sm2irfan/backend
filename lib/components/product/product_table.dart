@@ -12,6 +12,7 @@ import 'product_filters.dart';
 import 'supabase_product_bloc.dart';
 import 'add_product_manager.dart';
 import 'product_table_config.dart'; // Updated import
+import 'connectivity_helper.dart';
 // import 'column_visibility_manager.dart'; // Updated import
 
 // New Refresh Button Widget
@@ -1048,7 +1049,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     });
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
     final originalProduct = _editManager.editingProduct!;
 
     // Prepare values for validation
@@ -1083,8 +1084,180 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       return;
     }
 
-    // Create an updated product with the edited values
-    final updatedProduct = Product(
+    // Check internet connectivity BEFORE saving locally
+    final hasConnection = await ConnectivityHelper.hasInternetConnection();
+    
+    if (!hasConnection) {
+      // Show connectivity error with options
+      _showConnectivityOptionsDialog(originalProduct, priceValue);
+      return;
+    }
+
+    // If we have connection, proceed with save and sync
+    await _proceedWithSave(originalProduct, priceValue);
+  }
+
+  // Show dialog with options when no internet connection
+  void _showConnectivityOptionsDialog(Product originalProduct, String priceValue) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('No Internet Connection'),
+            ],
+          ),
+          content: const Text(
+            'Unable to sync changes to cloud. You can:\n\n'
+            '• Try again when internet is available\n'
+            '• Save locally only (changes won\'t sync to cloud until connected)',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Keep in edit mode - don't cancel editing
+              },
+              child: const Text('Try Again Later'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Retry connectivity check
+                _saveChanges();
+              },
+              child: const Text('Retry Now'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Save locally without cloud sync
+                _proceedWithLocalSaveOnly(originalProduct, priceValue);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save Locally Only'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Proceed with save and sync (when internet is available)
+  Future<void> _proceedWithSave(Product originalProduct, String priceValue) async {
+    final updatedProduct = _buildUpdatedProduct(originalProduct, priceValue);
+
+    // Update the product in the products list for UI refresh
+    final index = widget.products.indexWhere((p) => p.id == originalProduct.id);
+    if (index >= 0) {
+      setState(() {
+        widget.products[index] = updatedProduct;
+      });
+    }
+
+    // Update product in the local database
+    final LocalDatabase localDB = LocalDatabase();
+    try {
+      final success = await localDB.updateProduct(updatedProduct);
+      
+      if (success) {
+        // Sync to Supabase since we know we have internet
+        _updateToSupabase(updatedProduct);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved and synced: ${updatedProduct.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save changes to database'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return; // Don't exit edit mode if save failed
+      }
+    } catch (e) {
+      print('Error updating product in database: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating database: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return; // Don't exit edit mode if save failed
+    }
+
+    // Only exit edit mode if everything succeeded
+    setState(() {
+      _editManager.cancelEditing();
+    });
+  }
+
+  // Save locally only (when user chooses to save without internet)
+  Future<void> _proceedWithLocalSaveOnly(Product originalProduct, String priceValue) async {
+    final updatedProduct = _buildUpdatedProduct(originalProduct, priceValue);
+
+    // Update the product in the products list for UI refresh
+    final index = widget.products.indexWhere((p) => p.id == originalProduct.id);
+    if (index >= 0) {
+      setState(() {
+        widget.products[index] = updatedProduct;
+        // Add this product to error tracking to show sync needed
+        _productsWithErrors.add(updatedProduct.id);
+      });
+    }
+
+    // Update product in the local database only
+    final LocalDatabase localDB = LocalDatabase();
+    try {
+      final success = await localDB.updateProduct(updatedProduct);
+      
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved locally: ${updatedProduct.name} (will sync when connected)'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save changes to database'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return; // Don't exit edit mode if save failed
+      }
+    } catch (e) {
+      print('Error updating product in database: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating database: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return; // Don't exit edit mode if save failed
+    }
+
+    // Exit edit mode since local save succeeded
+    setState(() {
+      _editManager.cancelEditing();
+    });
+  }
+
+  // Helper method to build updated product
+  Product _buildUpdatedProduct(Product originalProduct, String priceValue) {
+    return Product(
       id: originalProduct.id,
       name: _editManager.nameController.text.trim(),
       uPrices: priceValue,
@@ -1102,7 +1275,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               ? _editManager.category2Controller.text
               : null,
       popularProduct: _editManager.editPopular,
-      production: _editManager.editProduction, // Add production value
+      production: _editManager.editProduction,
       matchingWords:
           _editManager.matchingWordsController.text.isNotEmpty
               ? _editManager.matchingWordsController.text
@@ -1111,53 +1284,6 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       createdAt: originalProduct.createdAt,
       updatedAt: DateTime.now(),
     );
-
-    // Update the product in the products list for UI refresh
-    final index = widget.products.indexWhere((p) => p.id == originalProduct.id);
-    if (index >= 0) {
-      setState(() {
-        widget.products[index] = updatedProduct;
-      });
-    }
-
-    // Update product in the local database
-    final LocalDatabase localDB = LocalDatabase();
-    try {
-      // Update the product in the database
-      localDB
-          .updateProduct(updatedProduct)
-          .then((success) {
-            String message;
-            if (success) {
-              message = 'Saved changes to: ${updatedProduct.name}';
-            } else {
-              message = 'Failed to save changes to database';
-            }
-
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(message)));
-
-            // If local update was successful, also update to Supabase
-            if (success) {
-              _updateToSupabase(updatedProduct);
-            }
-          })
-          .catchError((error) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error: ${error.toString()}')),
-            );
-          });
-    } catch (e) {
-      print('Error updating product in database: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating database: ${e.toString()}')),
-      );
-    }
-
-    setState(() {
-      _editManager.cancelEditing();
-    });
   }
 
   // Update the Supabase update method to track errors

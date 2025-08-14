@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'product.dart';
+import 'connectivity_helper.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
 import 'dart:io';
@@ -254,6 +255,19 @@ class _ProductImageEditorDialogState extends State<_ProductImageEditorDialog> {
   Future<void> _uploadImage() async {
     if (_selectedImageBytes == null || _selectedImageName == null) {
       _showErrorDialog('Please select an image first');
+      return;
+    }
+
+    // Check internet connectivity before uploading
+    final hasConnection = await ConnectivityHelper.hasInternetConnection();
+    
+    if (!hasConnection) {
+      // Show connectivity error with retry option
+      ConnectivityHelper.showConnectivityError(
+        context,
+        onRetry: () => _uploadImage(),
+        customMessage: 'Unable to upload image to cloud storage. Please check your internet connection and try again.',
+      );
       return;
     }
 

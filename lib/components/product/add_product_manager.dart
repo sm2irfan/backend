@@ -4,6 +4,7 @@ import 'editable_product_manager.dart';
 import 'product_image_editor.dart';
 import 'product_validators.dart';
 import 'supabase_product_bloc.dart'; // Add import for Supabase product
+import 'connectivity_helper.dart';
 import '../../data/local_database.dart'; // Add import for local database
 
 /// A class to manage adding new products in the product table
@@ -159,6 +160,15 @@ class AddProductManager {
     // Print the new product details to console for debugging
     print('New product created: $newProduct');
 
+    // Check internet connectivity BEFORE saving
+    final hasConnection = await ConnectivityHelper.hasInternetConnection();
+    
+    if (!hasConnection) {
+      // Show connectivity error with options
+      _showNewProductConnectivityDialog(context, newProduct);
+      return;
+    }
+
     try {
       // Save the product to Supabase and get the updated product with real ID
       final int dbGeneratedId = await _saveProductToSupabase(
@@ -218,6 +228,101 @@ class AddProductManager {
       onStateChanged(() {
         isAddingNewProduct = false;
       });
+    }
+  }
+
+  // Show dialog with options when no internet connection for new product
+  void _showNewProductConnectivityDialog(BuildContext context, Product newProduct) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('No Internet Connection'),
+            ],
+          ),
+          content: const Text(
+            'Unable to save new product to cloud. You can:\n\n'
+            '• Try again when internet is available\n'
+            '• Save locally only (product won\'t sync to cloud until connected)',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Keep in add mode - don't cancel adding
+              },
+              child: const Text('Try Again Later'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Retry connectivity check
+                saveNewProduct(context);
+              },
+              child: const Text('Retry Now'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Save locally without cloud sync
+                _proceedWithLocalNewProductOnly(context, newProduct);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save Locally Only'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Save new product locally only (when user chooses to save without internet)
+  Future<void> _proceedWithLocalNewProductOnly(BuildContext context, Product newProduct) async {
+    try {
+      // Save only to local database with temporary ID
+      final success = await _saveProductToLocalDatabase(context, newProduct);
+
+      if (success) {
+        // Notify parent that a new product has been created
+        onProductCreated(newProduct);
+
+        // Reset state
+        onStateChanged(() {
+          isAddingNewProduct = false;
+        });
+
+        // Show warning message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('New product saved locally: ${newProduct.name} (will sync when connected)'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save product locally'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        // Keep in add mode since save failed
+      }
+    } catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving locally: ${error.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      // Keep in add mode since save failed
     }
   }
 

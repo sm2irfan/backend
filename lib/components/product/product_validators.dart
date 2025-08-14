@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 class ProductValidators {
   // Predefined list of valid categories
   static const List<String> validCategories = [
+    "Vegetables and Fruits",
     "Spices and Seasonings",
     "Flours and Grains",
     "Cooking Oils",
@@ -15,6 +16,7 @@ class ProductValidators {
     "Beverages",
     "Snacks and Instant Foods",
     "Biscuits and Cakes",
+    "Noodles and Pasta",
     "Chocolates and Confectionery",
     "Household Cleaning and Tissues",
     "Baby Care",
@@ -22,7 +24,8 @@ class ProductValidators {
     "Frozen Foods",
     "Stationery Items",
     "Home Appliances",
-    "Lighting and Decor",
+    "Lighting and Electrical devices",
+    "Packed items for visitors",
     "Others",
   ];
 

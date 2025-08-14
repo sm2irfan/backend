@@ -219,7 +219,7 @@ class EditableProductManager {
         IconButton(
           icon: const Icon(Icons.check, size: 20, color: Colors.green),
           onPressed: onSave,
-          tooltip: 'Save changes',
+          tooltip: 'Save changes (requires internet for cloud sync)',
         ),
         IconButton(
           icon: const Icon(Icons.close, size: 20, color: Colors.red),
