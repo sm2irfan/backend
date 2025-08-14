@@ -879,6 +879,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         product: product,
         onEdit: _startEditing,
         onDelete: _showDeleteConfirmation,
+        onCopy: _copyProduct,
       );
     }
   }
@@ -1047,6 +1048,53 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     setState(() {
       _editManager.cancelEditing();
     });
+  }
+
+  void _copyProduct(Product product) {
+    // First check if we're currently editing and cancel that operation
+    if (_editManager.editingProduct != null) {
+      _editManager.cancelEditing();
+    }
+
+    // Cancel any pending add operation
+    _addProductManager.checkAndCancelAddNewProduct();
+
+    // Start adding a new product based on the copied product
+    setState(() {
+      _addProductManager.isAddingNewProduct = true;
+
+      // Populate the form with copied product data
+      _editManager.nameController.text = '${product.name} (Copy)';
+      _editManager.priceController.text = product.uPrices.toString();
+      _editManager.descriptionController.text = product.description ?? '';
+      _editManager.discountController.text = product.discount?.toString() ?? '';
+      _editManager.category1Controller.text = product.category1 ?? '';
+      _editManager.category2Controller.text = product.category2 ?? '';
+      _editManager.matchingWordsController.text = product.matchingWords ?? '';
+      _editManager.imageUrlController.text = product.image ?? '';
+      _editManager.editPopular = product.popularProduct;
+      _editManager.editProduction = product.production;
+    });
+
+    // Scroll to top to see the new row
+    if (_verticalScrollController.hasClients) {
+      _verticalScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    // Show confirmation message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Product copied: ${product.name}. You can now edit and save it.',
+        ),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _saveChanges() async {

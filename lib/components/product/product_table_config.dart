@@ -278,6 +278,10 @@ class TableDimensionsManager {
 
   /// Set the width for a specific column and save to database
   void setColumnWidth(int index, double width) {
+    // Enforce minimum width for Actions column (index 12)
+    if (index == 12 && width < 150.0) {
+      width = 150.0;
+    }
     _columnWidths[index] = width;
     if (prefsKey != null) {
       _saveColumnWidths();
@@ -362,6 +366,7 @@ abstract class ProductTableConfig {
     required Product product,
     required Function(Product) onEdit,
     required Function(BuildContext, Product) onDelete,
+    required Function(Product) onCopy,
   });
   Widget buildTable({
     required List<String> titles,
@@ -409,7 +414,7 @@ class MobileTableConfig implements ProductTableConfig {
     columnWidths[9] = 80.0; // Category 2
     columnWidths[10] = 50.0; // Popular
     columnWidths[11] = 70.0; // Matching Words
-    columnWidths[12] = 100.0; // Actions
+    columnWidths[12] = 200.0; // Actions (increased for copy button)
 
     return columnWidths;
   }
@@ -440,6 +445,7 @@ class MobileTableConfig implements ProductTableConfig {
     required Product product,
     required Function(Product) onEdit,
     required Function(BuildContext, Product) onDelete,
+    required Function(Product) onCopy,
   }) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -451,6 +457,14 @@ class MobileTableConfig implements ProductTableConfig {
           padding: 8,
           iconSize: 18,
           icon: Icons.edit,
+        ),
+        _buildActionButton(
+          onTap: () => onCopy(product),
+          size: 36,
+          padding: 8,
+          iconSize: 18,
+          icon: Icons.copy,
+          iconColor: Colors.blue,
         ),
         _buildActionButton(
           onTap: () => onDelete(context, product),
@@ -537,7 +551,7 @@ class DesktopTableConfig implements ProductTableConfig {
     columnWidths[9] = 120.0; // Category 2
     columnWidths[10] = 70.0; // Popular
     columnWidths[11] = 100.0; // Matching Words
-    columnWidths[12] = 100.0; // Actions
+    columnWidths[12] = 200.0; // Actions (increased for copy button)
 
     return columnWidths;
   }
@@ -568,31 +582,51 @@ class DesktopTableConfig implements ProductTableConfig {
     required Product product,
     required Function(Product) onEdit,
     required Function(BuildContext, Product) onDelete,
+    required Function(Product) onCopy,
   }) {
     return SizedBox(
-      width: 90,
+      width: 180.0, // Force minimum width
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          SizedBox(
-            width: 40,
-            height: 40,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              icon: const Icon(Icons.edit, size: 20),
-              onPressed: () => onEdit(product),
+          Flexible(
+            child: SizedBox(
+              width: 50,
+              height: 32,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+                icon: const Icon(Icons.edit, size: 16),
+                onPressed: () => onEdit(product),
+                tooltip: 'Edit product',
+              ),
             ),
           ),
-          SizedBox(
-            width: 40,
-            height: 40,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-              onPressed: () => onDelete(context, product),
+          Flexible(
+            child: SizedBox(
+              width: 50,
+              height: 32,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+                icon: const Icon(Icons.copy, size: 16, color: Colors.blue),
+                onPressed: () => onCopy(product),
+                tooltip: 'Copy product',
+              ),
+            ),
+          ),
+          Flexible(
+            child: SizedBox(
+              width: 50,
+              height: 32,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+                icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                onPressed: () => onDelete(context, product),
+                tooltip: 'Delete product',
+              ),
             ),
           ),
         ],

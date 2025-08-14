@@ -1,7 +1,27 @@
-# Internet Connectivity Check Implementation
+# Internet Connectivity Check + Product Copy Feature Implementation
 
 ## Overview
-Added internet connectivity checking **before** any database operations to ensure data consistency between local and cloud storage. If there's no internet connection, the user is given options to retry or save locally only, keeping the edit/add mode active until a decision is made.
+Added internet connectivity checking **before** any database operations to ensure data consistency between local and cloud storage, plus a new **Product Copy** feature that allows users to duplicate existing products with all their data for easy creation of similar items.
+
+## New Features
+
+### 1. Product Copy Functionality
+- **Copy Button**: Added to action buttons alongside Edit and Delete
+- **Smart Copying**: 
+  - Copies all product data including name, price, description, categories, etc.
+  - Automatically appends "(Copy)" to the product name
+  - Starts in "Add New Product" mode with pre-filled data
+  - User can modify any field before saving
+- **User Experience**: 
+  - Cancels any existing edit/add operations
+  - Scrolls to top to show the copied product form
+  - Shows confirmation message
+  - Follows same connectivity rules as new product creation
+
+### 2. Enhanced Internet Connectivity Checking
+- **Connectivity Check Before Any Save Operation**
+- **Keep Edit/Add Mode Active on Connection Issues**
+- **User Choice Dialog** when no internet connection is detected
 
 ## Changes Made
 
@@ -93,8 +113,32 @@ To test the connectivity checking:
 ## Files Modified
 - `pubspec.yaml` - Added connectivity_plus dependency
 - `lib/components/product/connectivity_helper.dart` - New utility class
-- `lib/components/product/product_table.dart` - Modified save flow with pre-save connectivity check
+- `lib/components/product/product_table.dart` - Modified save flow + added copy functionality
 - `lib/components/product/add_product_manager.dart` - Modified add product flow with connectivity check
 - `lib/components/product/product_image_editor.dart` - Added connectivity check to image uploads
 - `lib/components/product/sync_products_button.dart` - Already had connectivity checking
 - `lib/components/product/editable_product_manager.dart` - Updated tooltip text
+- `lib/components/product/product_table_config.dart` - Added copy button to action buttons, increased action column width
+
+## Copy Feature Usage
+
+1. **Find a Product**: Locate the product you want to copy in the table
+2. **Click Copy Button**: Click the blue copy icon (📄) in the action column
+3. **Edit Details**: The product data will be loaded into a new product form
+   - Name will have "(Copy)" appended
+   - All other fields will be pre-filled with original data
+   - Modify any fields as needed
+4. **Save**: Click the green save button to create the new product
+   - Follows same connectivity rules as new product creation
+   - If no internet: get options to retry or save locally
+
+## Benefits
+
+1. **Data Consistency**: Prevents data drift between local and cloud
+2. **Better UX**: Users get clear feedback about connectivity issues
+3. **Retry Functionality**: Users can easily retry operations when connection is restored
+4. **No Lost Work**: Edit/add sessions persist until user decides what to do
+5. **Clear Messaging**: Error messages explain exactly what failed and why
+6. **User Choice**: Users can choose to save locally if they don't want to wait
+7. **Efficient Product Creation**: Copy feature speeds up creation of similar products
+8. **Flexible Workflow**: Copy, edit, and save with full connectivity protection
