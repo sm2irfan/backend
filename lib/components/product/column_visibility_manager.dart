@@ -78,12 +78,67 @@ class ColumnVisibilityManager {
     required TextStyle style,
     required Function(int) onToggle,
     Widget? filterWidget,
+    VoidCallback? onSort,
+    bool? isSortable,
+    bool? isCurrentSortColumn,
+    bool? sortAscending,
   }) {
+    // Check if this column is sortable (default sortable columns)
+    final sortable =
+        isSortable ?? [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].contains(index);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
-          child: Text(title, style: style, overflow: TextOverflow.ellipsis),
+          child: Row(
+            children: [
+              // Make the title clickable for sorting if sortable
+              if (sortable && onSort != null)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onSort,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: style,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        // Show sort indicator
+                        if (isCurrentSortColumn == true)
+                          Icon(
+                            sortAscending == true
+                                ? Icons.arrow_upward
+                                : Icons.arrow_downward,
+                            size: 14,
+                            color: Colors.blue.shade600,
+                          )
+                        else
+                          Icon(
+                            Icons.unfold_more,
+                            size: 14,
+                            color: Colors.grey.shade400,
+                          ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                // Non-sortable column
+                Expanded(
+                  child: Text(
+                    title,
+                    style: style,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
         ),
         GestureDetector(
           onTap: () => onToggle(index),

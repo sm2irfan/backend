@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async'; // Important for Timer class
@@ -13,7 +14,7 @@ import 'supabase_product_bloc.dart';
 import 'add_product_manager.dart';
 import 'product_table_config.dart'; // Updated import
 import 'connectivity_helper.dart';
-// import 'column_visibility_manager.dart'; // Updated import
+import 'column_visibility_manager.dart' as col_manager;
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -325,6 +326,10 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   bool _isMobileView = false;
   final EditableProductManager _editManager = EditableProductManager();
 
+  // Sorting state
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
   // Replace the isAddingNewProduct flag with the AddProductManager
   late AddProductManager _addProductManager;
 
@@ -335,7 +340,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   late ProductTableConfig _tableConfig;
 
   // Column visibility manager
-  late ColumnVisibilityManager _columnVisibilityManager;
+  late col_manager.ColumnVisibilityManager _columnVisibilityManager;
 
   // Table dimensions manager
   late TableDimensionsManager _dimensionsManager;
@@ -365,7 +370,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     _initializeColumnWidths();
 
     // Initialize the column visibility manager
-    _columnVisibilityManager = ColumnVisibilityManager(
+    _columnVisibilityManager = col_manager.ColumnVisibilityManager(
       columnTitles: _titles,
       prefsKey: 'product_table_column_visibility',
     );
@@ -378,11 +383,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     );
 
     // Load any saved column visibility preferences with setState callback
-    _columnVisibilityManager.loadSavedPreferences(
-      onComplete: () {
-        if (mounted) setState(() {});
-      },
-    );
+    _columnVisibilityManager.loadSavedPreferences().then((_) {
+      if (mounted) setState(() {});
+    });
 
     // Load any saved dimensions with setState callback
     _dimensionsManager.loadSavedDimensions(
@@ -583,6 +586,69 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         ],
       ),
     );
+  }
+
+  // Sort products based on column index
+  void _sortProducts(int columnIndex) {
+    setState(() {
+      if (_sortColumnIndex == columnIndex) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortColumnIndex = columnIndex;
+        _sortAscending = true;
+      }
+
+      widget.products.sort((a, b) {
+        int result = 0;
+
+        switch (columnIndex) {
+          case 0: // ID
+            result = a.id.compareTo(b.id);
+            break;
+          case 1: // Created At
+            result = a.createdAt.compareTo(b.createdAt);
+            break;
+          case 2: // Updated At
+            result = (a.updatedAt ?? DateTime(1970)).compareTo(
+              b.updatedAt ?? DateTime(1970),
+            );
+            break;
+          case 4: // Product Name
+            result = a.name.compareTo(b.name);
+            break;
+          case 5: // Price (by discount amount: old_price - current_price)
+            result = a.discountAmount.compareTo(b.discountAmount);
+            break;
+          case 6: // Description
+            result = (a.description ?? '').compareTo(b.description ?? '');
+            break;
+          case 7: // Discount
+            result = (a.discount ?? 0).compareTo(b.discount ?? 0);
+            break;
+          case 8: // Category 1
+            result = (a.category1 ?? '').compareTo(b.category1 ?? '');
+            break;
+          case 9: // Category 2
+            result = (a.category2 ?? '').compareTo(b.category2 ?? '');
+            break;
+          case 10: // Popular
+            result = a.popularProduct ? 1 : 0;
+            result = result.compareTo(b.popularProduct ? 1 : 0);
+            break;
+          case 11: // Production
+            result = a.production ? 1 : 0;
+            result = result.compareTo(b.production ? 1 : 0);
+            break;
+          case 12: // Matching Words
+            result = (a.matchingWords ?? '').compareTo(b.matchingWords ?? '');
+            break;
+          default:
+            result = 0;
+        }
+
+        return _sortAscending ? result : -result;
+      });
+    });
   }
 
   // Modify the _buildTableWithNewRow method to use the column visibility manager
@@ -983,6 +1049,39 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                     ),
                   ),
                 ),
+              // Copy URL button - permanently visible when NOT in edit mode and has image URL
+              if (!isBeingEdited && imageUrl != null && imageUrl.isNotEmpty)
+                Positioned(
+                  top: 2,
+                  left: 2,
+                  child: Tooltip(
+                    message: 'Copy image URL',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade600.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: InkWell(
+                        onTap: () {
+                          _copyImageUrlToClipboard(imageUrl, product.name);
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.content_copy,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -992,6 +1091,52 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
   void _editProductImage(Product product) {
     ProductImageEditor.showEditDialog(context, product, _saveImageUrl);
+  }
+
+  // Helper method to copy image URL to clipboard
+  Future<void> _copyImageUrlToClipboard(
+    String imageUrl,
+    String productName,
+  ) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: imageUrl));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Image URL copied to clipboard for: $productName',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Text('Failed to copy URL to clipboard'),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   // Helper method to save the image URL
@@ -1563,6 +1708,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                       );
                     }),
                 filterWidget: filterWidget,
+                onSort: () => _sortProducts(index),
+                isCurrentSortColumn: _sortColumnIndex == index,
+                sortAscending: _sortAscending,
               ),
               if (filterWidget != null) filterWidget,
             ],

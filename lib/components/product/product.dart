@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -44,6 +45,75 @@ class Product extends Equatable {
     if (category1 != null) category1!,
     if (category2 != null) category2!,
   ];
+
+  // Parse the uPrices JSON string and extract price information
+  Map<String, dynamic>? get priceData {
+    try {
+      if (uPrices.trim().startsWith('[') && uPrices.trim().endsWith(']')) {
+        // Handle array format like [{"price": "650", "unit": "1box","old_price":"700","limit": "2"}]
+        final List<dynamic> priceList = jsonDecode(uPrices) as List<dynamic>;
+        if (priceList.isNotEmpty && priceList.first is Map<String, dynamic>) {
+          return priceList.first as Map<String, dynamic>;
+        }
+      } else if (uPrices.trim().startsWith('{') &&
+          uPrices.trim().endsWith('}')) {
+        // Handle object format like {"price": "650", "unit": "1box","old_price":"700","limit": "2"}
+        return jsonDecode(uPrices) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      // If JSON parsing fails, return null
+      return null;
+    }
+    return null;
+  }
+
+  // Get the current price as a double
+  double get currentPrice {
+    final data = priceData;
+    if (data != null && data['price'] != null) {
+      try {
+        return double.parse(data['price'].toString());
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    // Fallback: try to parse uPrices as a direct number
+    try {
+      return double.parse(uPrices);
+    } catch (e) {
+      return 0.0;
+    }
+  }
+
+  // Get the old price as a double
+  double get oldPrice {
+    final data = priceData;
+    if (data != null && data['old_price'] != null) {
+      try {
+        return double.parse(data['old_price'].toString());
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    return 0.0;
+  }
+
+  // Calculate the discount amount (old_price - current_price)
+  double get discountAmount {
+    return oldPrice - currentPrice;
+  }
+
+  // Get the unit information
+  String get unit {
+    final data = priceData;
+    return data?['unit']?.toString() ?? '';
+  }
+
+  // Get the limit information
+  String get limit {
+    final data = priceData;
+    return data?['limit']?.toString() ?? '';
+  }
 
   factory Product.fromJson(Map<String, dynamic> json) {
     try {
