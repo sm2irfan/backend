@@ -205,13 +205,15 @@ class AddProductManager {
         isAddingNewProduct = false;
       });
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('New product added: ${newProduct.name}'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      // Show success message only if context is still mounted
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('New product added: ${newProduct.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (error) {
       // Show error message if Supabase save failed
       ScaffoldMessenger.of(context).showSnackBar(
@@ -570,99 +572,5 @@ class AddProductManager {
         editManager.imageUrlController.text = newUrl;
       });
     });
-  }
-
-  // Helper method to build category cells with autocomplete
-  Widget _buildEditableCategoryCell(
-    BuildContext context,
-    TextEditingController controller,
-    String label,
-  ) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 150),
-      child: Autocomplete<String>(
-        optionsBuilder: (TextEditingValue textEditingValue) {
-          if (textEditingValue.text.isEmpty) {
-            return ProductValidators.validCategories;
-          }
-          return ProductValidators.validCategories.where(
-            (category) => category.toLowerCase().contains(
-              textEditingValue.text.toLowerCase(),
-            ),
-          );
-        },
-        onSelected: (String selection) {
-          onStateChanged(() {
-            controller.text = selection;
-          });
-        },
-        fieldViewBuilder: (
-          BuildContext context,
-          TextEditingController fieldController,
-          FocusNode fieldFocusNode,
-          VoidCallback onFieldSubmitted,
-        ) {
-          // Sync the autocomplete controller with our actual controller
-          fieldController.text = controller.text;
-
-          return TextField(
-            controller: fieldController,
-            focusNode: fieldFocusNode,
-            style: const TextStyle(fontSize: 13.0),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 8,
-                horizontal: 10,
-              ),
-              border: InputBorder.none,
-              hintText: label,
-              suffixIcon: const Icon(Icons.arrow_drop_down, size: 16),
-            ),
-            onChanged: (value) {
-              // Update our actual controller when text changes
-              controller.text = value;
-            },
-          );
-        },
-        optionsViewBuilder: (
-          BuildContext context,
-          AutocompleteOnSelected<String> onSelected,
-          Iterable<String> options,
-        ) {
-          return Align(
-            alignment: Alignment.topLeft,
-            child: Material(
-              elevation: 4.0,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxHeight: 200,
-                  maxWidth: 200,
-                ),
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(8.0),
-                  itemCount: options.length,
-                  itemBuilder: (BuildContext context, int index) {
-                    final String option = options.elementAt(index);
-                    return InkWell(
-                      onTap: () {
-                        onSelected(option);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          option,
-                          style: const TextStyle(fontSize: 13.0),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }

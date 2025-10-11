@@ -8,7 +8,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
-import '../../components/common/app_drawer.dart';
 
 class ImageUploadPage extends StatefulWidget {
   const ImageUploadPage({super.key});
