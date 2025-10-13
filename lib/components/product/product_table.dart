@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async'; // Important for Timer class
+import 'dart:convert'; // For JSON parsing
 import '../../data/local_database.dart';
 import 'product_validators.dart';
 import 'product.dart';
@@ -15,6 +16,7 @@ import 'add_product_manager.dart';
 import 'product_table_config.dart'; // Updated import
 import 'connectivity_helper.dart';
 import 'column_visibility_manager.dart' as col_manager;
+import 'product_details_service.dart'; // Add import for product details service
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -840,9 +842,187 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
   }
 
   Widget _buildPriceCell(Product product, bool isEditing, TextStyle style) {
-    return isEditing
-        ? _editManager.buildEditablePriceCell()
-        : SelectableText(product.uPrices, style: style);
+    if (isEditing) {
+      return _editManager.buildEditablePriceCell();
+    } else {
+      // Parse the JSON string to get the number of price elements
+      List<dynamic> priceList = [];
+      try {
+        priceList = jsonDecode(product.uPrices);
+      } catch (e) {
+        print('Error parsing uPrices JSON: $e');
+        // Fallback to showing the raw string if JSON parsing fails
+        return SelectableText(product.uPrices, style: style);
+      }
+
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final content = Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelectableText(product.uPrices, style: style),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 2,
+                runSpacing: 2,
+                children: List.generate(priceList.length, (index) {
+                  final priceItem = priceList[index];
+                  final price = priceItem['price'] ?? '';
+                  final unit = priceItem['unit'] ?? '';
+                  final oldPrice = priceItem['old_price'];
+                  final priceItemId = priceItem['id'];
+                  final hasId =
+                      priceItemId != null && priceItemId.toString().isNotEmpty;
+
+                  return ElevatedButton(
+                    onPressed: () async {
+                      // Check if priceItem has an 'id' field
+                      final priceItemId = priceItem['id'];
+
+                      if (priceItemId == null ||
+                          priceItemId.toString().isEmpty) {
+                        // Show message to user that ID is required
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Cannot open product details: This price element needs an ID. Please edit the product and add an ID to the uPrices element.',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: Colors.orange.shade600,
+                              duration: const Duration(seconds: 4),
+                              action: SnackBarAction(
+                                label: 'Edit Product',
+                                textColor: Colors.white,
+                                onPressed: () {
+                                  // Start editing this product
+                                  _startEditing(product);
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                        return; // Exit early if no ID
+                      }
+
+                      // Handle product details button click only if ID exists
+                      await ProductDetailsButtonHandler.handlePriceButtonClick(
+                        productId: product.id,
+                        productName: product.name,
+                        priceItem: priceItem,
+                        priceIndex: index,
+                        onDataFetched: (
+                          List<ProductDetails> productDetailsList,
+                        ) {
+                          // Show the product details in a dialog
+                          ProductDetailsButtonHandler.showProductDetailsDialog(
+                            context: context,
+                            productName: product.name,
+                            compositeId:
+                                ProductDetailsService.generateCompositeId(
+                                  product.id,
+                                  priceItemId.toString(),
+                                ),
+                            productDetailsList: productDetailsList,
+                          );
+                        },
+                        onError: (String error) {
+                          // Show error message
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(error),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(40, 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      backgroundColor:
+                          !hasId
+                              ? Colors
+                                  .red
+                                  .shade300 // Red for missing ID
+                              : oldPrice != null
+                              ? Colors.orange
+                              : null,
+                      side:
+                          !hasId
+                              ? BorderSide(color: Colors.red.shade700, width: 1)
+                              : null,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!hasId) ...[
+                          Icon(
+                            Icons.warning,
+                            size: 10,
+                            color: Colors.red.shade800,
+                          ),
+                          const SizedBox(width: 2),
+                        ],
+                        Flexible(
+                          child: Text(
+                            '$price/$unit',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: !hasId ? Colors.red.shade800 : null,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ],
+          );
+
+          final hasFixedHeight =
+              constraints.hasBoundedHeight && constraints.maxHeight.isFinite;
+
+          if (!hasFixedHeight) {
+            return content;
+          }
+
+          return ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              physics: const ClampingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: content,
+              ),
+            ),
+          );
+        },
+      );
+    }
   }
 
   Widget _buildDescriptionCell(
