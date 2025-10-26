@@ -244,7 +244,7 @@ class ProductDetailsService {
 
       // Find the specific price item and add stock type
       bool found = false;
-      
+
       if (stockType == 'sole_stock') {
         // For sole_stock, add it to ALL elements in the price list
         for (var priceItem in priceList) {
