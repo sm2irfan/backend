@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/local_database.dart';
 
@@ -288,6 +289,17 @@ class RefreshCurrentPage extends ProductEvent {
   List<Object> get props => [currentPage, pageSize];
 }
 
+// New event for updating a specific product's stock
+class UpdateProductStock extends ProductEvent {
+  final int productId;
+  final String uPriceId;
+
+  const UpdateProductStock({required this.productId, required this.uPriceId});
+
+  @override
+  List<Object> get props => [productId, uPriceId];
+}
+
 // New event for filtering products
 class FilterProductsByColumn extends ProductEvent {
   final String column;
@@ -381,6 +393,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     on<LoadPopularProducts>(_onLoadPopularProducts);
     on<LoadProductsByCategory>(_onLoadProductsByCategory);
     on<RefreshCurrentPage>(_onRefreshCurrentPage);
+    on<UpdateProductStock>(_onUpdateProductStock);
     on<FilterProductsByColumn>(_onFilterProductsByColumn); // Add new handler
   }
 
@@ -514,6 +527,74 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       );
     } catch (e) {
       emit(ProductError(e.toString()));
+    }
+  }
+
+  // New handler for updating product stock
+  Future<void> _onUpdateProductStock(
+    UpdateProductStock event,
+    Emitter<ProductState> emit,
+  ) async {
+    print(
+      'UpdateProductStock event triggered for product ${event.productId}, uPrice ${event.uPriceId}',
+    );
+    final currentState = state;
+
+    // Only update if we have loaded products
+    if (currentState is ProductsLoaded) {
+      try {
+        // Try to fetch the updated product from the pre_all_products table first
+        dynamic response;
+        try {
+          response =
+              await Supabase.instance.client
+                  .from('pre_all_products')
+                  .select('*')
+                  .eq('id', event.productId)
+                  .single();
+        } catch (e) {
+          // If not found in pre_all_products table, try all_products view
+          print(
+            'Product ${event.productId} not found in pre_all_products table, trying all_products view',
+          );
+          response =
+              await Supabase.instance.client
+                  .from('all_products')
+                  .select('*')
+                  .eq('id', event.productId)
+                  .single();
+        }
+
+        // Convert to Product model
+        final updatedProduct = Product.fromJson(response);
+
+        // Find and replace the product in the current list
+        final updatedProducts =
+            currentState.products.map((product) {
+              if (product.id == event.productId) {
+                return updatedProduct;
+              }
+              return product;
+            }).toList();
+
+        // Emit new state with updated product
+        emit(
+          ProductsLoaded(
+            products: updatedProducts,
+            totalItems: currentState.totalItems,
+            currentPage: currentState.currentPage,
+            hasNextPage: currentState.hasNextPage,
+            hasPreviousPage: currentState.hasPreviousPage,
+            activeFilters: currentState.activeFilters,
+          ),
+        );
+      } catch (e) {
+        // If individual update fails, fall back to full page refresh
+        print(
+          'Error updating single product stock: $e, falling back to full refresh',
+        );
+        // Don't emit error, just continue with existing state
+      }
     }
   }
 

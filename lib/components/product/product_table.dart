@@ -16,7 +16,7 @@ import 'add_product_manager.dart';
 import 'product_table_config.dart'; // Updated import
 import 'connectivity_helper.dart';
 import 'column_visibility_manager.dart' as col_manager;
-import 'product_details_service.dart'; // Add import for product details service
+import 'product_details.dart'; // Add import for product details service
 
 // New Refresh Button Widget
 class RefreshButton extends StatefulWidget {
@@ -867,135 +867,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
               Wrap(
                 spacing: 2,
                 runSpacing: 2,
-                children: List.generate(priceList.length, (index) {
-                  final priceItem = priceList[index];
-                  final price = priceItem['price'] ?? '';
-                  final unit = priceItem['unit'] ?? '';
-                  final oldPrice = priceItem['old_price'];
-                  final priceItemId = priceItem['id'];
-                  final hasId =
-                      priceItemId != null && priceItemId.toString().isNotEmpty;
-
-                  return ElevatedButton(
-                    onPressed: () async {
-                      // Check if priceItem has an 'id' field
-                      final priceItemId = priceItem['id'];
-
-                      if (priceItemId == null ||
-                          priceItemId.toString().isEmpty) {
-                        // Show message to user that ID is required
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.warning,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Cannot open product details: This price element needs an ID. Please edit the product and add an ID to the uPrices element.',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: Colors.orange.shade600,
-                              duration: const Duration(seconds: 4),
-                              action: SnackBarAction(
-                                label: 'Edit Product',
-                                textColor: Colors.white,
-                                onPressed: () {
-                                  // Start editing this product
-                                  _startEditing(product);
-                                },
-                              ),
-                            ),
-                          );
-                        }
-                        return; // Exit early if no ID
-                      }
-
-                      // Handle product details button click only if ID exists
-                      await ProductDetailsButtonHandler.handlePriceButtonClick(
-                        productId: product.id,
-                        productName: product.name,
-                        priceItem: priceItem,
-                        priceIndex: index,
-                        onDataFetched: (
-                          List<ProductDetails> productDetailsList,
-                        ) {
-                          // Show the product details in a dialog
-                          ProductDetailsButtonHandler.showProductDetailsDialog(
-                            context: context,
-                            productName: product.name,
-                            compositeId:
-                                ProductDetailsService.generateCompositeId(
-                                  product.id,
-                                  priceItemId.toString(),
-                                ),
-                            productDetailsList: productDetailsList,
-                          );
-                        },
-                        onError: (String error) {
-                          // Show error message
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(error),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(40, 20),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      backgroundColor:
-                          !hasId
-                              ? Colors
-                                  .red
-                                  .shade300 // Red for missing ID
-                              : oldPrice != null
-                              ? Colors.orange
-                              : null,
-                      side:
-                          !hasId
-                              ? BorderSide(color: Colors.red.shade700, width: 1)
-                              : null,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!hasId) ...[
-                          Icon(
-                            Icons.warning,
-                            size: 10,
-                            color: Colors.red.shade800,
-                          ),
-                          const SizedBox(width: 2),
-                        ],
-                        Flexible(
-                          child: Text(
-                            '$price/$unit',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: !hasId ? Colors.red.shade800 : null,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
+                children: _buildPriceButtons(priceList, product),
               ),
             ],
           );
@@ -1023,6 +895,317 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         },
       );
     }
+  }
+
+  List<Widget> _buildPriceButtons(List<dynamic> priceList, Product product) {
+    // Check if ANY element in the priceList has global_stock
+    bool hasGlobalStock = false;
+    int globalStockValue = 0;
+    Map<String, dynamic>? globalStockItem;
+
+    for (var priceItem in priceList) {
+      if (priceItem is Map<String, dynamic>) {
+        if (priceItem.containsKey('global_stock') &&
+            priceItem['global_stock'] != null) {
+          // If global_stock exists (even if it's "0"), show single button
+          int stockValue =
+              int.tryParse(priceItem['global_stock'].toString()) ?? 0;
+          hasGlobalStock = true;
+          globalStockValue = stockValue;
+          globalStockItem = priceItem;
+          break; // Found global stock, no need to continue
+        }
+      }
+    }
+
+    // If any element has global_stock, show only one button
+    if (hasGlobalStock && globalStockItem != null) {
+      final stockItem = globalStockItem; // We checked for null above
+      final price = stockItem['price'] ?? '';
+      final unit = stockItem['unit'] ?? '';
+      final priceItemId = stockItem['id'];
+      final hasId = priceItemId != null && priceItemId.toString().isNotEmpty;
+
+      return [
+        ElevatedButton(
+          onPressed: () async {
+            if (priceItemId == null || priceItemId.toString().isEmpty) {
+              // Show message to user that ID is required
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Cannot open product details: This price element needs an ID. Please edit the product and add an ID to the uPrices element.',
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Colors.orange.shade600,
+                    duration: const Duration(seconds: 4),
+                    action: SnackBarAction(
+                      label: 'Edit Product',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        _startEditing(product);
+                      },
+                    ),
+                  ),
+                );
+              }
+              return;
+            }
+
+            // Handle global stock button click
+            await ProductDetailsButtonHandler.handlePriceButtonClick(
+              context: context,
+              productId: product.id,
+              productName: product.name,
+              priceItem: stockItem,
+              priceIndex: 0, // Use 0 since we're showing only one button
+              onStockTypeAdded: () {
+                final productBloc = BlocProvider.of<ProductBloc>(context);
+                productBloc.add(
+                  UpdateProductStock(
+                    productId: product.id,
+                    uPriceId: priceItemId.toString(),
+                  ),
+                );
+              },
+              onDataFetched: (List<ProductDetails> productDetailsList) {
+                ProductDetailsButtonHandler.showProductDetailsDialog(
+                  context: context,
+                  productName: product.name,
+                  compositeId: ProductDetailsService.generateCompositeId(
+                    product.id,
+                    priceItemId.toString(),
+                  ),
+                  productDetailsList: productDetailsList,
+                  onStockUpdated: () {
+                    final productBloc = BlocProvider.of<ProductBloc>(context);
+                    productBloc.add(
+                      UpdateProductStock(
+                        productId: product.id,
+                        uPriceId: priceItemId.toString(),
+                      ),
+                    );
+                  },
+                );
+              },
+              onError: (String error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error), backgroundColor: Colors.red),
+                  );
+                }
+              },
+            );
+          },
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(40, 20),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            backgroundColor: Colors.green.shade100,
+            side: BorderSide(color: Colors.green.shade300, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!hasId) ...[
+                Icon(Icons.warning, size: 10, color: Colors.red.shade800),
+                const SizedBox(width: 2),
+              ],
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$price/$unit',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color:
+                            !hasId
+                                ? Colors.red.shade800
+                                : Colors.green.shade800,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'Global: $globalStockValue',
+                      style: TextStyle(
+                        fontSize: 7,
+                        color:
+                            !hasId
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    // If no global stock found, create buttons for all price items (original behavior)
+    return List.generate(priceList.length, (index) {
+      final priceItem = priceList[index];
+      final price = priceItem['price'] ?? '';
+      final unit = priceItem['unit'] ?? '';
+      final oldPrice = priceItem['old_price'];
+      final priceItemId = priceItem['id'];
+      final hasId = priceItemId != null && priceItemId.toString().isNotEmpty;
+
+      // Get stock information for display - check all stock types
+      String stockText = '';
+      if (priceItem.containsKey('sole_stock') &&
+          priceItem['sole_stock'] != null &&
+          priceItem['sole_stock'].toString().isNotEmpty) {
+        stockText = ' (Sole: ${priceItem['sole_stock']})';
+      } else if (priceItem.containsKey('stock') &&
+          priceItem['stock'] != null &&
+          priceItem['stock'].toString().isNotEmpty) {
+        stockText = ' (Stock: ${priceItem['stock']})';
+      }
+
+      return ElevatedButton(
+        onPressed: () async {
+          if (priceItemId == null || priceItemId.toString().isEmpty) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Cannot open product details: This price element needs an ID. Please edit the product and add an ID to the uPrices element.',
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.orange.shade600,
+                  duration: const Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: 'Edit Product',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      _startEditing(product);
+                    },
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+
+          await ProductDetailsButtonHandler.handlePriceButtonClick(
+            context: context,
+            productId: product.id,
+            productName: product.name,
+            priceItem: priceItem,
+            priceIndex: index,
+            onStockTypeAdded: () {
+              final productBloc = BlocProvider.of<ProductBloc>(context);
+              productBloc.add(
+                UpdateProductStock(
+                  productId: product.id,
+                  uPriceId: priceItemId.toString(),
+                ),
+              );
+            },
+            onDataFetched: (List<ProductDetails> productDetailsList) {
+              ProductDetailsButtonHandler.showProductDetailsDialog(
+                context: context,
+                productName: product.name,
+                compositeId: ProductDetailsService.generateCompositeId(
+                  product.id,
+                  priceItemId.toString(),
+                ),
+                productDetailsList: productDetailsList,
+                onStockUpdated: () {
+                  final productBloc = BlocProvider.of<ProductBloc>(context);
+                  productBloc.add(
+                    UpdateProductStock(
+                      productId: product.id,
+                      uPriceId: priceItemId.toString(),
+                    ),
+                  );
+                },
+              );
+            },
+            onError: (String error) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(error), backgroundColor: Colors.red),
+                );
+              }
+            },
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(40, 20),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          backgroundColor:
+              !hasId
+                  ? Colors.red.shade300
+                  : oldPrice != null
+                  ? Colors.orange
+                  : null,
+          side:
+              !hasId ? BorderSide(color: Colors.red.shade700, width: 1) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!hasId) ...[
+              Icon(Icons.warning, size: 10, color: Colors.red.shade800),
+              const SizedBox(width: 2),
+            ],
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$price/$unit',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: !hasId ? Colors.red.shade800 : null,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (stockText.isNotEmpty)
+                    Text(
+                      stockText,
+                      style: TextStyle(
+                        fontSize: 7,
+                        color:
+                            !hasId
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildDescriptionCell(

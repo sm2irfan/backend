@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -70,7 +71,8 @@ class ProductDetailsService {
       final response = await _supabase
           .from(_tableName)
           .select()
-          .eq('identity_id', compositeId);
+          .eq('identity_id', compositeId)
+          .order('created_at', ascending: true);
 
       if (response.isEmpty) {
         print('No product details found for identity_id: $compositeId');
@@ -103,7 +105,8 @@ class ProductDetailsService {
       final response = await _supabase
           .from(_tableName)
           .select()
-          .like('identity_id', '$productId-%');
+          .like('identity_id', '$productId-%')
+          .order('created_at', ascending: true);
 
       if (response.isEmpty) {
         print('No product details found for product ID: $productId');
@@ -155,20 +158,18 @@ class ProductDetailsService {
     ProductDetails productDetail,
   ) async {
     try {
-      print('Updating product detail: ${productDetail.identityId}');
+      print('Updating product detail with ID: ${productDetail.id}');
 
       final response =
           await _supabase
               .from(_tableName)
               .update(productDetail.toJson())
-              .eq('identity_id', productDetail.identityId)
+              .eq('id', productDetail.id)
               .select()
               .single();
 
       final updatedProductDetail = ProductDetails.fromJson(response);
-      print(
-        'Product detail updated successfully: ${updatedProductDetail.identityId}',
-      );
+      print('Product detail updated successfully: ${updatedProductDetail.id}');
       return updatedProductDetail;
     } catch (error) {
       print('Error updating product detail: $error');
@@ -176,14 +177,14 @@ class ProductDetailsService {
     }
   }
 
-  /// Delete a product detail
-  static Future<void> deleteProductDetail(String compositeId) async {
+  /// Delete a product detail by its unique ID
+  static Future<void> deleteProductDetail(int id) async {
     try {
-      print('Deleting product detail: $compositeId');
+      print('Deleting product detail with ID: $id');
 
-      await _supabase.from(_tableName).delete().eq('identity_id', compositeId);
+      await _supabase.from(_tableName).delete().eq('id', id);
 
-      print('Product detail deleted successfully: $compositeId');
+      print('Product detail deleted successfully: $id');
     } catch (error) {
       print('Error deleting product detail: $error');
       throw Exception('Failed to delete product detail: $error');
@@ -206,18 +207,257 @@ class ProductDetailsService {
 
     return {'productId': int.tryParse(parts[0]), 'uPriceId': parts[1]};
   }
+
+  /// Check if any product details exist for a given product ID
+  static Future<bool> hasProductDetailsForProductId(int productId) async {
+    try {
+      final response = await _supabase
+          .from(_tableName)
+          .select('id')
+          .like('identity_id', '$productId-%')
+          .limit(1);
+
+      return response.isNotEmpty;
+    } catch (error) {
+      print('Error checking product details existence: $error');
+      return false;
+    }
+  }
+
+  /// Add stock type attribute to a specific uPrice element
+  static Future<void> addStockTypeToProduct(
+    int productId,
+    String uPriceId,
+    String stockType, // 'global_stock' or 'sole_stock'
+  ) async {
+    try {
+      // Get current product
+      final response =
+          await _supabase
+              .from('pre_all_products')
+              .select('uprices')
+              .eq('id', productId)
+              .single();
+
+      final currentUPrices = response['uprices'] as String;
+      final List<dynamic> priceList = jsonDecode(currentUPrices);
+
+      // Find the specific price item and add stock type
+      bool found = false;
+      
+      if (stockType == 'sole_stock') {
+        // For sole_stock, add it to ALL elements in the price list
+        for (var priceItem in priceList) {
+          priceItem[stockType] = '0'; // Initialize with 0
+        }
+        found = true; // Set found to true since we're updating all items
+        print('Added $stockType to ALL price items in product $productId');
+      } else {
+        // For other stock types (like global_stock), only add to the specific item
+        for (var priceItem in priceList) {
+          if (priceItem['id']?.toString() == uPriceId) {
+            priceItem[stockType] = '0'; // Initialize with 0
+            found = true;
+            break;
+          }
+        }
+      }
+
+      if (!found) {
+        throw Exception(
+          'Price item with ID $uPriceId not found in product $productId',
+        );
+      }
+
+      // Update the product in the database
+      final updatedUPrices = jsonEncode(priceList);
+      await _supabase
+          .from('pre_all_products')
+          .update({'uprices': updatedUPrices})
+          .eq('id', productId)
+          .select()
+          .single();
+
+      print(
+        'Successfully added $stockType to product $productId, price item $uPriceId',
+      );
+    } catch (e) {
+      print('Error adding stock type to product: $e');
+      throw Exception('Failed to add stock type to product: $e');
+    }
+  }
+}
+
+/// Stock type selection dialog
+class StockTypeSelectionDialog extends StatelessWidget {
+  final String productName;
+  final int productId;
+  final String uPriceId;
+  final VoidCallback onGlobalStockSelected;
+  final VoidCallback onSoleStockSelected;
+
+  const StockTypeSelectionDialog({
+    Key? key,
+    required this.productName,
+    required this.productId,
+    required this.uPriceId,
+    required this.onGlobalStockSelected,
+    required this.onSoleStockSelected,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.inventory, color: Colors.blue, size: 24),
+          SizedBox(width: 8),
+          Text('Choose Stock Type'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This is the first time adding stock for:',
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  productName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text('Product ID: $productId'),
+                Text('Price Variant ID: $uPriceId'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Please select how you want to track stock for this product:',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.public, color: Colors.green, size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      'Global Stock',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Track total combined stock across all locations/batches',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.inventory_2, color: Colors.orange, size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      'Sole Stock',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Track individual stock entries separately by supplier/batch',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.of(context).pop();
+            onGlobalStockSelected();
+          },
+          icon: const Icon(Icons.public, size: 16),
+          label: const Text('Global Stock'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.of(context).pop();
+            onSoleStockSelected();
+          },
+          icon: const Icon(Icons.inventory_2, size: 16),
+          label: const Text('Sole Stock'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Handler class for product details button clicks
 class ProductDetailsButtonHandler {
   /// Handle button click for a specific price variant
   static Future<void> handlePriceButtonClick({
+    required BuildContext context,
     required int productId,
     required String productName,
     required Map<String, dynamic> priceItem,
     required int priceIndex,
     required Function(List<ProductDetails>) onDataFetched,
     required Function(String) onError,
+    VoidCallback? onStockTypeAdded,
   }) async {
     try {
       // Extract the ID from the price item (if it exists)
@@ -235,6 +475,79 @@ class ProductDetailsButtonHandler {
       print('uPrice ID: $uPriceId');
       print('Composite ID: $compositeId');
       print('Price Item: $priceItem');
+
+      // Check if any product details exist for this product ID
+      final bool hasExistingDetails =
+          await ProductDetailsService.hasProductDetailsForProductId(productId);
+
+      if (!hasExistingDetails) {
+        // Check if the price item already has stock type attributes
+        final bool hasGlobalStock = priceItem.containsKey('global_stock');
+        final bool hasSoleStock = priceItem.containsKey('sole_stock');
+
+        if (!hasGlobalStock && !hasSoleStock) {
+          // Show stock type selection dialog
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) {
+              return StockTypeSelectionDialog(
+                productName: productName,
+                productId: productId,
+                uPriceId: uPriceId,
+                onGlobalStockSelected: () async {
+                  try {
+                    await ProductDetailsService.addStockTypeToProduct(
+                      productId,
+                      uPriceId,
+                      'global_stock',
+                    );
+                    if (onStockTypeAdded != null) {
+                      onStockTypeAdded();
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Global stock tracking enabled for this product',
+                        ),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } catch (e) {
+                    onError('Failed to set global stock type: $e');
+                  }
+                },
+                onSoleStockSelected: () async {
+                  try {
+                    await ProductDetailsService.addStockTypeToProduct(
+                      productId,
+                      uPriceId,
+                      'sole_stock',
+                    );
+                    if (onStockTypeAdded != null) {
+                      onStockTypeAdded();
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Sole stock tracking enabled for this product',
+                        ),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  } catch (e) {
+                    onError('Failed to set sole stock type: $e');
+                  }
+                },
+              );
+            },
+          );
+
+          // After stock type is set, we don't proceed to show the details dialog yet
+          // The user needs to click again to actually manage stock
+          return;
+        }
+      }
 
       // Fetch product details from Supabase
       final List<ProductDetails> productDetailsList =
@@ -259,19 +572,21 @@ class ProductDetailsButtonHandler {
   }
 
   /// Show product details in a dialog
-  static void showProductDetailsDialog({
+  static Future<void> showProductDetailsDialog({
     required context,
     required String productName,
     required String compositeId,
     required List<ProductDetails> productDetailsList,
+    VoidCallback? onStockUpdated,
   }) {
-    showDialog(
+    return showDialog(
       context: context,
       builder: (BuildContext context) {
         return ProductDetailsDialog(
           productName: productName,
           compositeId: compositeId,
           productDetailsList: productDetailsList,
+          onStockUpdated: onStockUpdated,
         );
       },
     );
@@ -283,12 +598,14 @@ class ProductDetailsDialog extends StatefulWidget {
   final String productName;
   final String compositeId;
   final List<ProductDetails> productDetailsList;
+  final VoidCallback? onStockUpdated;
 
   const ProductDetailsDialog({
     Key? key,
     required this.productName,
     required this.compositeId,
     required this.productDetailsList,
+    this.onStockUpdated,
   }) : super(key: key);
 
   @override
@@ -314,6 +631,8 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
   void initState() {
     super.initState();
     _productDetailsList = List.from(widget.productDetailsList);
+    // Sort by created_at to ensure ascending order
+    _productDetailsList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
   }
 
   @override
@@ -331,6 +650,116 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
       }
     }
     super.dispose();
+  }
+
+  /// Update the stock attribute in the product's uPrices JSON
+  Future<void> _updateProductStock(
+    int productId,
+    String uPriceId,
+    int quantityToAdd,
+  ) async {
+    try {
+      print(
+        'Attempting to update stock for product $productId, uPrice $uPriceId, quantity change: $quantityToAdd',
+      );
+
+      // First check if the product exists
+      final existsResponse = await Supabase.instance.client
+          .from('pre_all_products')
+          .select('id')
+          .eq('id', productId);
+
+      if (existsResponse.isEmpty) {
+        throw Exception(
+          'Product with ID $productId does not exist in pre_all_products table',
+        );
+      }
+
+      // Get current product data
+      final response =
+          await Supabase.instance.client
+              .from('pre_all_products')
+              .select('uprices')
+              .eq('id', productId)
+              .single();
+
+      final currentUPrices = response['uprices'] as String;
+
+      // Parse the current uPrices JSON
+      final List<dynamic> priceList = jsonDecode(currentUPrices);
+
+      // Find the specific price item and update its stock
+      bool found = false;
+      for (var priceItem in priceList) {
+        if (priceItem['id']?.toString() == uPriceId) {
+          // Determine which stock type to update based on existing attributes
+          if (priceItem.containsKey('global_stock')) {
+            // Update global stock
+            final currentStock =
+                priceItem['global_stock'] != null
+                    ? int.tryParse(priceItem['global_stock'].toString()) ?? 0
+                    : 0;
+            priceItem['global_stock'] =
+                (currentStock + quantityToAdd).toString();
+            print(
+              'Updated global_stock for product $productId, uPrice $uPriceId: ${priceItem['global_stock']}',
+            );
+          } else if (priceItem.containsKey('sole_stock')) {
+            // Update sole stock
+            final currentStock =
+                priceItem['sole_stock'] != null
+                    ? int.tryParse(priceItem['sole_stock'].toString()) ?? 0
+                    : 0;
+            priceItem['sole_stock'] = (currentStock + quantityToAdd).toString();
+            print(
+              'Updated sole_stock for product $productId, uPrice $uPriceId: ${priceItem['sole_stock']}',
+            );
+          } else {
+            // Legacy support: if neither stock type is defined, use 'stock' attribute
+            final currentStock =
+                priceItem['stock'] != null
+                    ? int.tryParse(priceItem['stock'].toString()) ?? 0
+                    : 0;
+            priceItem['stock'] = (currentStock + quantityToAdd).toString();
+            print(
+              'Updated legacy stock for product $productId, uPrice $uPriceId: ${priceItem['stock']}',
+            );
+          }
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        throw Exception(
+          'Price item with ID $uPriceId not found in product $productId',
+        );
+      }
+
+      // Convert back to JSON string
+      final updatedUPrices = jsonEncode(priceList);
+
+      // Update the product in the database
+      final updateResponse = await Supabase.instance.client
+          .from('pre_all_products')
+          .update({'uprices': updatedUPrices})
+          .eq('id', productId);
+
+      print(
+        'Successfully updated stock for product $productId, price item $uPriceId. Update response: $updateResponse',
+      );
+    } catch (e) {
+      print(
+        'Error updating product stock for product $productId, uPrice $uPriceId: $e',
+      );
+      if (e.toString().contains('multiple (or no) rows returned')) {
+        print('Product $productId not found in pre_all_products table');
+        throw Exception(
+          'Product $productId not found in database. Please check if the product exists.',
+        );
+      }
+      throw Exception('Failed to update product stock: $e');
+    }
   }
 
   void _addNewRow() {
@@ -353,11 +782,29 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
   void _saveNewRow() async {
     if (_validateNewRowInputs()) {
       try {
+        final newQuantity = int.parse(_quantityController.text);
+
+        // Parse composite ID to get product ID and price item ID
+        final compositeIdParts = ProductDetailsService.parseCompositeId(
+          widget.compositeId,
+        );
+        final productId = compositeIdParts['productId'];
+        final uPriceId = compositeIdParts['uPriceId'];
+
+        // Try to update stock in product's uPrices before saving product details
+        try {
+          await _updateProductStock(productId, uPriceId, newQuantity);
+        } catch (e) {
+          // If the product doesn't exist in all_products table, log warning but continue
+          print('Warning: Could not update stock in all_products table: $e');
+          print('Continuing with product detail creation...');
+        }
+
         final newDetail = ProductDetails(
           id: 0, // Will be auto-generated by database
           identityId: widget.compositeId,
           createdAt: DateTime.now(),
-          quantity: int.parse(_quantityController.text),
+          quantity: newQuantity,
           unit: _unitController.text,
           price: int.parse(_priceController.text),
           supplier: _supplierController.text,
@@ -375,8 +822,19 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
 
         setState(() {
           _productDetailsList = updatedList;
+          // Sort by created_at to maintain ascending order
+          _productDetailsList.sort(
+            (a, b) => a.createdAt.compareTo(b.createdAt),
+          );
           _newRowIndex = null;
         });
+
+        // Notify parent about stock update with a small delay to ensure DB consistency
+        if (widget.onStockUpdated != null) {
+          // Add a small delay to ensure the database update is fully committed
+          await Future.delayed(const Duration(milliseconds: 100));
+          widget.onStockUpdated!();
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Product detail added successfully')),
@@ -460,17 +918,37 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
     final controllers = _editControllers[index]!;
 
     try {
+      final oldQuantity = _productDetailsList[index].quantity;
+      final newQuantity = int.parse(controllers['quantity']!.text);
+      final quantityDifference = newQuantity - oldQuantity;
+
       final updatedDetail = ProductDetails(
         id: _productDetailsList[index].id,
         identityId: _productDetailsList[index].identityId,
         createdAt: _productDetailsList[index].createdAt,
-        quantity: int.parse(controllers['quantity']!.text),
+        quantity: newQuantity,
         unit: controllers['unit']!.text,
         price: int.parse(controllers['price']!.text),
         supplier: controllers['supplier']!.text,
         expireDate: DateTime.parse(controllers['expireDate']!.text),
       );
 
+      // Try to update stock if quantity changed
+      if (quantityDifference != 0) {
+        final compositeIdParts = ProductDetailsService.parseCompositeId(
+          widget.compositeId,
+        );
+        final productId = compositeIdParts['productId'];
+        final uPriceId = compositeIdParts['uPriceId'];
+
+        try {
+          await _updateProductStock(productId, uPriceId, quantityDifference);
+        } catch (e) {
+          // If the product doesn't exist in all_products table, log warning but continue
+          print('Warning: Could not update stock in all_products table: $e');
+          print('Continuing with product detail update...');
+        }
+      }
       await ProductDetailsService.updateProductDetail(updatedDetail);
 
       // Refresh the list
@@ -481,8 +959,17 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
 
       setState(() {
         _productDetailsList = updatedList;
+        // Sort by created_at to maintain ascending order
+        _productDetailsList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         _editingRows.remove(index);
       });
+
+      // Notify parent about stock update if quantity changed with a delay to ensure DB consistency
+      if (quantityDifference != 0 && widget.onStockUpdated != null) {
+        // Add a small delay to ensure the database update is fully committed
+        await Future.delayed(const Duration(milliseconds: 100));
+        widget.onStockUpdated!();
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Product detail updated successfully')),
@@ -574,8 +1061,26 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
     // Only proceed with deletion if user confirmed
     if (shouldDelete == true) {
       try {
+        final deletedQuantity = productDetail.quantity;
+
+        // Try to update stock by reducing the deleted quantity
+        final compositeIdParts = ProductDetailsService.parseCompositeId(
+          widget.compositeId,
+        );
+        final productId = compositeIdParts['productId'];
+        final uPriceId = compositeIdParts['uPriceId'];
+
+        try {
+          await _updateProductStock(productId, uPriceId, -deletedQuantity);
+        } catch (e) {
+          // If the product doesn't exist in all_products table, just log and continue
+          // The product detail can still be deleted from products_details table
+          print('Warning: Could not update stock in all_products table: $e');
+          print('Continuing with product detail deletion...');
+        }
+
         await ProductDetailsService.deleteProductDetail(
-          _productDetailsList[index].identityId,
+          _productDetailsList[index].id,
         );
 
         // Refresh the list
@@ -586,7 +1091,18 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
 
         setState(() {
           _productDetailsList = updatedList;
+          // Sort by created_at to maintain ascending order
+          _productDetailsList.sort(
+            (a, b) => a.createdAt.compareTo(b.createdAt),
+          );
         });
+
+        // Notify parent about stock update with a delay to ensure DB consistency
+        if (widget.onStockUpdated != null) {
+          // Add a small delay to ensure the database update is fully committed
+          await Future.delayed(const Duration(milliseconds: 100));
+          widget.onStockUpdated!();
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Product detail deleted successfully')),
