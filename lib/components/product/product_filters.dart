@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'dart:async';
 import 'product.dart';
 
 /// Column filter input with real-time debouncing capability
@@ -25,10 +24,6 @@ class ColumnFilterInput extends StatefulWidget {
 
 class _ColumnFilterInputState extends State<ColumnFilterInput> {
   late TextEditingController _controller;
-  Timer? _debounceTimer;
-
-  // Debounce duration (milliseconds to wait after typing stops)
-  static const Duration _debounceDuration = Duration(milliseconds: 500);
 
   @override
   void initState() {
@@ -54,90 +49,51 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel(); // Important: Cancel timer when disposed
     _controller.dispose();
     super.dispose();
   }
 
-  void _applyFilter(String value) {
-    // Cancel any existing timer
-    _debounceTimer?.cancel();
+  void _applyFilter() {
+    if (!mounted) return;
 
-    // Start a new timer
-    _debounceTimer = Timer(_debounceDuration, () {
-      if (!mounted) return;
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    final String columnLower = widget.columnName.toLowerCase();
+    final String trimmedValue = _controller.text.trim();
 
-      final productBloc = BlocProvider.of<ProductBloc>(context);
+    print('Applying filter for column: $columnLower, value: "$trimmedValue"');
 
-      // Get the lowercase column name for easier comparison
-      final String columnLower = widget.columnName.toLowerCase();
-      final String trimmedValue = value.trim();
-
-      print('Applying filter for column: $columnLower, value: "$trimmedValue"');
-
-      // Special handling for ID column to support comma-separated values
-      if (columnLower == 'id') {
-        // Only apply filter if not empty
-        if (trimmedValue.isNotEmpty) {
-          print('Adding ID filter event with value: $trimmedValue');
-          productBloc.add(
-            FilterProductsByColumn(
-              column: columnLower,
-              value:
-                  trimmedValue, // BLoC will handle comma-separated processing
-              page: 1, // Reset to first page when applying filter
-              pageSize: widget.pageSize,
-            ),
-          );
-        } else {
-          // If value is empty, clear the filter
-          print('Clearing ID filter');
-          productBloc.add(
-            FilterProductsByColumn(
-              column: columnLower,
-              value: "", // Empty value to clear the filter
-              page: 1,
-              pageSize: widget.pageSize,
-            ),
-          );
-        }
-      }
-      // Special handling for name column to use SQL LIKE query for partial matching
-      else if (columnLower == 'name') {
-        print('Adding NAME filter with SQL LIKE query: %$trimmedValue%');
-        // Apply the filter with trimmed value and SQL LIKE syntax
-        productBloc.add(
-          FilterProductsByColumn(
-            column: columnLower,
-            value: trimmedValue,
-            page: 1, // Reset to first page when applying filter
-            pageSize: widget.pageSize,
-            filterType:
-                'like', // Use SQL LIKE query operator for partial matches
-          ),
-        );
-        print('NAME filter event added to bloc with LIKE query');
-      }
-      // Standard filtering for other columns
-      else {
-        print('Adding standard filter for column: $columnLower');
-        productBloc.add(
-          FilterProductsByColumn(
-            column: columnLower,
-            value: trimmedValue,
-            page: 1, // Reset to first page when applying filter
-            pageSize: widget.pageSize,
-          ),
-        );
-      }
-    });
+    // Special handling for name column to use SQL LIKE query for partial matching
+    if (columnLower == 'name') {
+      print('Adding NAME filter with SQL LIKE query: %$trimmedValue%');
+      productBloc.add(
+        FilterProductsByColumn(
+          column: columnLower,
+          value: trimmedValue,
+          page: 1,
+          pageSize: widget.pageSize,
+          filterType: 'like',
+        ),
+      );
+    }
+    // Standard filtering for other columns (including ID)
+    else {
+      print('Adding filter for column: $columnLower');
+      productBloc.add(
+        FilterProductsByColumn(
+          column: columnLower,
+          value: trimmedValue,
+          page: 1,
+          pageSize: widget.pageSize,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     // Show different hint text based on column type
     final String hintText =
-        widget.columnName.toLowerCase() == 'id' ? "1,2,3..." : "Filter";
+        widget.columnName.toLowerCase() == 'id' ? "1,2,3..." : "Press Enter";
 
     return Container(
       width: 60, // Adjust width as needed
@@ -163,7 +119,8 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
           ),
         ),
         style: const TextStyle(fontSize: 11),
-        onChanged: _applyFilter,
+        onSubmitted: (_) => _applyFilter(),
+        textInputAction: TextInputAction.search,
       ),
     );
   }

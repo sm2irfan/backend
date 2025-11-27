@@ -9,7 +9,7 @@ class ProductDetails {
   final DateTime createdAt;
   final int quantity;
   final String unit;
-  final int price;
+  final double price;
   final String supplier;
   final DateTime expireDate;
 
@@ -31,7 +31,9 @@ class ProductDetails {
       createdAt: DateTime.parse(json['created_at'] as String),
       quantity: json['quantity'] as int,
       unit: json['unit'] as String,
-      price: json['price'] as int,
+        price: (json['price'] is int)
+          ? (json['price'] as int).toDouble()
+          : double.tryParse(json['price'].toString()) ?? 0.0,
       supplier: json['supplier'] as String,
       expireDate: DateTime.parse(json['expire_date'] as String),
     );
@@ -253,10 +255,13 @@ class ProductDetailsService {
         found = true; // Set found to true since we're updating all items
         print('Added $stockType to ALL price items in product $productId');
       } else {
-        // For other stock types (like global_stock), only add to the specific item
+        // For global_stock, only add to the specific item
         for (var priceItem in priceList) {
-          if (priceItem['id']?.toString() == uPriceId) {
+          final priceItemId = priceItem['id']?.toString();
+          print('Checking priceItem id: $priceItemId against uPriceId: $uPriceId');
+          if (priceItemId == uPriceId) {
             priceItem[stockType] = '0'; // Initialize with 0
+            print('Added $stockType to price item $priceItemId in product $productId');
             found = true;
             break;
           }
@@ -806,7 +811,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
           createdAt: DateTime.now(),
           quantity: newQuantity,
           unit: _unitController.text,
-          price: int.parse(_priceController.text),
+          price: double.tryParse(_priceController.text) ?? 0.0,
           supplier: _supplierController.text,
           expireDate: DateTime.parse(_expireDateController.text),
         );
@@ -866,9 +871,9 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
       return false;
     }
 
-    if (int.tryParse(_priceController.text) == null) {
+    if (double.tryParse(_priceController.text) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Price must be a valid number')),
+        const SnackBar(content: Text('Price must be a valid number (e.g. 10.50)')),
       );
       return false;
     }
@@ -928,7 +933,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
         createdAt: _productDetailsList[index].createdAt,
         quantity: newQuantity,
         unit: controllers['unit']!.text,
-        price: int.parse(controllers['price']!.text),
+        price: double.tryParse(controllers['price']!.text) ?? 0.0,
         supplier: controllers['supplier']!.text,
         expireDate: DateTime.parse(controllers['expireDate']!.text),
       );
@@ -1125,7 +1130,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            SelectableText(
               'Composite ID: ${widget.compositeId}',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
@@ -1284,7 +1289,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                           TableCell(
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: Text(
+                              child: SelectableText(
                                 detail.id.toString(),
                                 style: const TextStyle(fontSize: 13),
                               ),
@@ -1293,7 +1298,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                           TableCell(
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: Text(
+                              child: SelectableText(
                                 detail.identityId,
                                 style: const TextStyle(fontSize: 13),
                               ),
@@ -1313,7 +1318,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                           isDense: true,
                                         ),
                                       )
-                                      : Text(
+                                      : SelectableText(
                                         detail.quantity.toString(),
                                         style: const TextStyle(fontSize: 13),
                                       ),
@@ -1333,7 +1338,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                           isDense: true,
                                         ),
                                       )
-                                      : Text(
+                                      : SelectableText(
                                         detail.unit,
                                         style: const TextStyle(fontSize: 13),
                                       ),
@@ -1353,7 +1358,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                           isDense: true,
                                         ),
                                       )
-                                      : Text(
+                                      : SelectableText(
                                         detail.price.toString(),
                                         style: const TextStyle(fontSize: 13),
                                       ),
@@ -1373,7 +1378,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                           isDense: true,
                                         ),
                                       )
-                                      : Text(
+                                      : SelectableText(
                                         detail.supplier,
                                         style: const TextStyle(fontSize: 13),
                                       ),
@@ -1394,7 +1399,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                           hintText: 'YYYY-MM-DD',
                                         ),
                                       )
-                                      : Text(
+                                      : SelectableText(
                                         detail.expireDate
                                             .toLocal()
                                             .toString()
@@ -1406,7 +1411,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                           TableCell(
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: Text(
+                              child: SelectableText(
                                 detail.createdAt.toLocal().toString(),
                                 style: const TextStyle(fontSize: 13),
                               ),
@@ -1484,7 +1489,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                           TableCell(
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: Text(
+                              child: SelectableText(
                                 widget.compositeId,
                                 style: const TextStyle(
                                   fontSize: 13,

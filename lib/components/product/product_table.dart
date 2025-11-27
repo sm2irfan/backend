@@ -130,12 +130,8 @@ class ColumnFilterInput extends StatefulWidget {
 
 class _ColumnFilterInputState extends State<ColumnFilterInput> {
   late TextEditingController _controller;
-  Timer? _debounceTimer;
   // Add a FocusNode to manage focus persistence
   final FocusNode _focusNode = FocusNode();
-
-  // Debounce duration (milliseconds to wait after typing stops)
-  static const Duration _debounceDuration = Duration(milliseconds: 500);
 
   @override
   void initState() {
@@ -193,59 +189,47 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel(); // Important: Cancel timer when disposed
     _controller.dispose();
     _focusNode.dispose(); // Dispose the focus node
     super.dispose();
   }
 
-  void _applyFilter(String value) {
-    // Cancel any existing timer
-    _debounceTimer?.cancel();
+  void _applyFilter() {
+    if (!mounted) return;
 
-    // Store the current value locally
-    final String currentText = value;
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    final String columnLower = widget.columnName.toLowerCase();
+    
+    // For name and category1 filtering, preserve spaces exactly as typed
+    final String processedValue =
+        (columnLower == 'name' || columnLower == 'category1')
+            ? _controller.text.replaceAll('LIKE:', '') // Only remove LIKE: prefix
+            : _controller.text.trim(); // For other columns, just trim
 
-    // Start a new timer
-    _debounceTimer = Timer(_debounceDuration, () {
-      if (!mounted) return;
-
-      final productBloc = BlocProvider.of<ProductBloc>(context);
-
-      // Get lowercase column name for comparison
-      final String columnLower = widget.columnName.toLowerCase();
-
-      // For name and category1 filtering, preserve spaces exactly as typed
-      final String processedValue =
-          (columnLower == 'name' || columnLower == 'category1')
-              ? currentText.replaceAll('LIKE:', '') // Only remove LIKE: prefix
-              : currentText.trim(); // For other columns, just trim
-
-      // Add special handling for name and category1 columns to support partial matching
-      if (columnLower == 'name' || columnLower == 'category1') {
-        print(
-          'Adding ${columnLower} filter with LIKE query: "$processedValue"',
-        );
-        productBloc.add(
-          FilterProductsByColumn(
-            column: columnLower,
-            value: processedValue,
-            page: 1,
-            pageSize: widget.pageSize,
-            filterType: 'like', // Use LIKE query for partial matching
-          ),
-        );
-      } else {
-        productBloc.add(
-          FilterProductsByColumn(
-            column: columnLower,
-            value: processedValue,
-            page: 1,
-            pageSize: widget.pageSize,
-          ),
-        );
-      }
-    });
+    // Add special handling for name and category1 columns to support partial matching
+    if (columnLower == 'name' || columnLower == 'category1') {
+      print(
+        'Adding ${columnLower} filter with LIKE query: "$processedValue"',
+      );
+      productBloc.add(
+        FilterProductsByColumn(
+          column: columnLower,
+          value: processedValue,
+          page: 1,
+          pageSize: widget.pageSize,
+          filterType: 'like', // Use LIKE query for partial matching
+        ),
+      );
+    } else {
+      productBloc.add(
+        FilterProductsByColumn(
+          column: columnLower,
+          value: processedValue,
+          page: 1,
+          pageSize: widget.pageSize,
+        ),
+      );
+    }
   }
 
   @override
@@ -253,7 +237,7 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
     // Show different hint text based on column type
     final String hintText =
         widget.hintText ??
-        (widget.columnName.toLowerCase() == 'id' ? "1,2,3..." : "Filter");
+        (widget.columnName.toLowerCase() == 'id' ? "1,2,3..." : "Press Enter");
 
     return Container(
       width: widget.width, // Use customizable width
@@ -283,7 +267,8 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
           ),
         ),
         style: TextStyle(fontSize: widget.width > 60 ? 13 : 11),
-        onChanged: _applyFilter,
+        onSubmitted: (_) => _applyFilter(),
+        textInputAction: TextInputAction.search,
       ),
     );
   }
