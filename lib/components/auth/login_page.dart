@@ -39,7 +39,7 @@ class LoginPageState extends State<LoginPage> {
       });
 
       if (result.success) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).pushReplacementNamed('/products');
       }
     }
   }

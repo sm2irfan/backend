@@ -10,7 +10,27 @@ class ProductDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SimpleAdminDashboard();
+    print('[ProductDashboard] Building ProductDashboard');
+    try {
+      return const SimpleAdminDashboard();
+    } catch (e, stackTrace) {
+      print('[ProductDashboard] Error building dashboard: $e');
+      print('[ProductDashboard] Stack trace: $stackTrace');
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: Colors.red),
+              SizedBox(height: 16),
+              Text('Error loading dashboard'),
+              SizedBox(height: 8),
+              Text(e.toString(), style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -35,9 +55,18 @@ class _SimpleAdminDashboardState extends State<SimpleAdminDashboard> {
   @override
   void initState() {
     super.initState();
-    // Initialize bloc in initState instead of in the build method
-    _productBloc = ProductBloc(ProductRepository());
-    _productBloc.add(LoadPaginatedProducts(page: 1, pageSize: _pageSize));
+    print('[SimpleAdminDashboard] initState started');
+    try {
+      // Initialize bloc in initState instead of in the build method
+      print('[SimpleAdminDashboard] Creating ProductBloc...');
+      _productBloc = ProductBloc(ProductRepository());
+      print('[SimpleAdminDashboard] ProductBloc created, loading products...');
+      _productBloc.add(LoadPaginatedProducts(page: 1, pageSize: _pageSize));
+      print('[SimpleAdminDashboard] LoadPaginatedProducts event added');
+    } catch (e, stackTrace) {
+      print('[SimpleAdminDashboard] Error in initState: $e');
+      print('[SimpleAdminDashboard] Stack trace: $stackTrace');
+    }
   }
 
   @override

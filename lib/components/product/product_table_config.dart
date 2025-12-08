@@ -27,10 +27,14 @@ class ColumnVisibilityManager {
 
   /// Toggle the visibility of a column
   void toggleColumnVisibility(int columnIndex) {
+    print('[COLUMN_PREFS] toggleColumnVisibility called for column $columnIndex');
+    print('[COLUMN_PREFS] Stack trace: ${StackTrace.current}');
     if (_hiddenColumns.contains(columnIndex)) {
       _hiddenColumns.remove(columnIndex);
+      print('[COLUMN_PREFS] Showing column $columnIndex');
     } else {
       _hiddenColumns.add(columnIndex);
+      print('[COLUMN_PREFS] Hiding column $columnIndex');
     }
     if (prefsKey != null) {
       _savePreferences();
@@ -188,17 +192,31 @@ class ColumnVisibilityManager {
 
   /// Save preferences to SQLite database
   Future<void> _savePreferences() async {
-    if (prefsKey == null) return;
+    print('[COLUMN_PREFS] _savePreferences called, prefsKey: $prefsKey');
+    if (prefsKey == null) {
+      print('[COLUMN_PREFS] prefsKey is null, returning');
+      return;
+    }
 
     try {
+      print(
+        '[COLUMN_PREFS] Saving visibility for ${_hiddenColumns.length} hidden columns',
+      );
       await _localDatabase.saveColumnVisibility(
         prefsKey!,
         _hiddenColumns.toList(),
       );
-    } catch (e) {
+      print('[COLUMN_PREFS] Column visibility saved successfully');
+    } catch (e, stackTrace) {
       print('Error saving column visibility preferences: $e');
+      print('Stack trace: $stackTrace');
       // Fall back to SharedPreferences if database fails
-      _saveToSharedPreferences();
+      try {
+        await _saveToSharedPreferences();
+        print('[COLUMN_PREFS] Saved to SharedPreferences as fallback');
+      } catch (fallbackError) {
+        print('Error with SharedPreferences fallback: $fallbackError');
+      }
     }
   }
 
@@ -282,6 +300,7 @@ class TableDimensionsManager {
       width = 150.0;
     }
     _columnWidths[index] = width;
+    print('[COLUMN_PREFS] Saving column $index width: $width');
     if (prefsKey != null) {
       _saveColumnWidths();
     }
@@ -308,6 +327,9 @@ class TableDimensionsManager {
       // Load column widths
       final savedWidths = await _localDatabase.loadColumnWidths(prefsKey!);
       if (savedWidths.isNotEmpty) {
+        print(
+          '[COLUMN_PREFS] Loaded ${savedWidths.length} saved column widths',
+        );
         _columnWidths.addAll(savedWidths);
         needsUpdate = true;
       }
@@ -315,6 +337,7 @@ class TableDimensionsManager {
       // Load row height
       final savedHeight = await _localDatabase.loadRowHeight(prefsKey!);
       if (savedHeight != null) {
+        print('[COLUMN_PREFS] Loaded saved row height: $savedHeight');
         _rowHeight = savedHeight;
         needsUpdate = true;
       }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../data/local_database.dart';
 
 /// Manages the visibility of table columns
 class ColumnVisibilityManager {
@@ -8,6 +8,9 @@ class ColumnVisibilityManager {
 
   /// Optional key for storing preferences
   final String? prefsKey;
+
+  /// Local database instance
+  final LocalDatabase _localDatabase = LocalDatabase();
 
   final Set<int> _hiddenColumns = <int>{};
 
@@ -20,12 +23,17 @@ class ColumnVisibilityManager {
 
   /// Toggle the visibility of a column
   void toggleColumnVisibility(int columnIndex) {
+    print('[OLD_COL_MGR] toggleColumnVisibility called for column $columnIndex');
+    print('[OLD_COL_MGR] Stack trace: ${StackTrace.current}');
     if (_hiddenColumns.contains(columnIndex)) {
       _hiddenColumns.remove(columnIndex);
+      print('[OLD_COL_MGR] Showing column $columnIndex');
     } else {
       _hiddenColumns.add(columnIndex);
+      print('[OLD_COL_MGR] Hiding column $columnIndex');
     }
     if (prefsKey != null) {
+      print('[OLD_COL_MGR] Calling _savePreferences with prefsKey: $prefsKey');
       _savePreferences();
     }
   }
@@ -52,6 +60,14 @@ class ColumnVisibilityManager {
     }
 
     return visibleWidths;
+  }
+
+  /// Load saved preferences from database
+  Future<void> loadSavedPreferences({VoidCallback? onComplete}) async {
+    await _loadPreferences();
+    if (onComplete != null) {
+      onComplete();
+    }
   }
 
   /// Create TableRow with only visible cells
@@ -189,39 +205,43 @@ class ColumnVisibilityManager {
     );
   }
 
-  /// Load saved preferences
-  Future<void> loadSavedPreferences() async {
+  /// Load preferences
+  Future<void> _loadPreferences() async {
     if (prefsKey == null) return;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final List<String>? hiddenIndices = prefs.getStringList(prefsKey!);
+      final hiddenIndices = await _localDatabase.loadColumnVisibility(prefsKey!);
 
-      if (hiddenIndices != null) {
+      if (hiddenIndices.isNotEmpty) {
         _hiddenColumns.clear();
         _hiddenColumns.addAll(
-          hiddenIndices
-              .map((s) => int.tryParse(s) ?? -1)
-              .where((i) => i >= 0 && i < columnTitles.length),
+          hiddenIndices.where((i) => i >= 0 && i < columnTitles.length),
         );
       }
     } catch (e) {
+      print('[OLD_COL_MGR] Error loading preferences: $e');
       // Silently ignore errors loading preferences
     }
   }
 
   /// Save preferences
   Future<void> _savePreferences() async {
-    if (prefsKey == null) return;
+    print('[OLD_COL_MGR] _savePreferences called, prefsKey: $prefsKey');
+    if (prefsKey == null) {
+      print('[OLD_COL_MGR] prefsKey is null, returning');
+      return;
+    }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(
+      print('[OLD_COL_MGR] Saving ${_hiddenColumns.length} hidden columns to database');
+      await _localDatabase.saveColumnVisibility(
         prefsKey!,
-        _hiddenColumns.map((i) => i.toString()).toList(),
+        _hiddenColumns.toList(),
       );
-    } catch (e) {
+      print('[OLD_COL_MGR] Successfully saved preferences to database');
+    } catch (e, stackTrace) {
       print('Error saving column visibility preferences: $e');
+      print('Stack trace: $stackTrace');
     }
   }
 }

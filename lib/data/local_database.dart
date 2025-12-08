@@ -790,14 +790,20 @@ Then restart the application.
   // Ensure that the column visibility table exists
   Future<void> ensureColumnVisibilityTableExists() async {
     try {
+      print('[DB] Checking column_visibility table...');
       final db = await database;
+      print('[DB] Database connection obtained');
 
       // Check if the table exists
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='column_visibility'",
       );
+      print(
+        '[DB] Table check query completed, found ${tables.length} tables',
+      );
 
       if (tables.isEmpty) {
+        print('[DB] Creating column_visibility table...');
         await db.execute('''
         CREATE TABLE column_visibility(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -807,9 +813,20 @@ Then restart the application.
           UNIQUE(view_name, column_index)
         )
         ''');
+        print('[DB] column_visibility table created successfully');
+      } else {
+        print('[DB] column_visibility table already exists');
       }
-    } catch (e) {
-      developer.log('Error creating column visibility table: $e');
+    } on FormatException catch (e, stackTrace) {
+      print(
+        '[DB] FormatException in ensureColumnVisibilityTableExists: $e',
+      );
+      print('[DB] Stack trace: $stackTrace');
+      rethrow;
+    } catch (e, stackTrace) {
+      print('[DB] Error ensuring column visibility table: $e');
+      print('[DB] Stack trace: $stackTrace');
+      rethrow;
     }
   }
 
@@ -848,8 +865,14 @@ Then restart the application.
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
-    } catch (e) {
-      developer.log('Error saving column visibility settings: $e');
+      print('Successfully saved column visibility for $viewName');
+    } on FormatException catch (e, stackTrace) {
+      print('FormatException saving column visibility: $e');
+      print('Stack trace: $stackTrace');
+      // Don't rethrow - let caller handle gracefully
+    } catch (e, stackTrace) {
+      print('Error saving column visibility settings: $e');
+      print('Stack trace: $stackTrace');
       // Don't throw here to prevent UI crashes if saving fails
     }
   }
