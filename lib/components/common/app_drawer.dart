@@ -97,6 +97,22 @@ class AppDrawer extends StatelessWidget {
           ),
           _buildNavItem(
             context,
+            icon: Icons.receipt_long,
+            title: 'Purchase Details',
+            isActive: currentPage == 'Purchase Details',
+            onTap: () {
+              onPageSelected('Purchase Details');
+              Navigator.pop(context);
+              // Use pushNamedAndRemoveUntil to avoid empty history issues
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.purchaseDetails,
+                (_) => false, // Clear the entire stack
+              );
+            },
+          ),
+          _buildNavItem(
+            context,
             icon: Icons.shopping_cart,
             title: 'Orders',
             isActive: currentPage == 'Orders',
@@ -144,7 +160,12 @@ class AppDrawer extends StatelessWidget {
       title: Text(
         title,
         style: TextStyle(
-          color: isActive ? Theme.of(context).primaryColor : Colors.grey[700],
+          color: const Color.fromARGB(
+            255,
+            43,
+            39,
+            49,
+          ), // Changed to custom color for all titles
           fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
         ),
       ),

@@ -352,9 +352,32 @@ Then restart the application.
 
         for (var item in response) {
           try {
+            print(
+              'LocalDatabase - Syncing product ID: ${item['id']}, uprices: ${item['uprices']}',
+            );
+
             // Convert bool to int for SQLite
             final popularProductInt = item['popular_product'] == true ? 1 : 0;
             final productionInt = item['production'] == true ? 1 : 0;
+
+            // Validate and clean uprices
+            String upricesValue;
+            if (item['uprices'] == null) {
+              upricesValue = '[]';
+              print(
+                'LocalDatabase - uprices is null for product ${item['id']}, using []',
+              );
+            } else if (item['uprices'].toString().isEmpty) {
+              upricesValue = '[]';
+              print(
+                'LocalDatabase - uprices is empty for product ${item['id']}, using []',
+              );
+            } else {
+              upricesValue = item['uprices'].toString();
+              print(
+                'LocalDatabase - uprices for product ${item['id']}: $upricesValue',
+              );
+            }
 
             // Use insert with REPLACE conflict strategy
             await txn.insert('all_products', {
@@ -364,7 +387,7 @@ Then restart the application.
               'updated_at':
                   item['updated_at'] ?? DateTime.now().toIso8601String(),
               'name': item['name'] ?? 'Unnamed Product',
-              'uprices': item['uprices']?.toString() ?? '0',
+              'uprices': upricesValue,
               'image': item['image'],
               'discount': item['discount'],
               'description': item['description'],

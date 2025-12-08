@@ -31,9 +31,10 @@ class ProductDetails {
       createdAt: DateTime.parse(json['created_at'] as String),
       quantity: json['quantity'] as int,
       unit: json['unit'] as String,
-        price: (json['price'] is int)
-          ? (json['price'] as int).toDouble()
-          : double.tryParse(json['price'].toString()) ?? 0.0,
+      price:
+          (json['price'] is int)
+              ? (json['price'] as int).toDouble()
+              : double.tryParse(json['price'].toString()) ?? 0.0,
       supplier: json['supplier'] as String,
       expireDate: DateTime.parse(json['expire_date'] as String),
     );
@@ -241,7 +242,14 @@ class ProductDetailsService {
               .eq('id', productId)
               .single();
 
-      final currentUPrices = response['uprices'] as String;
+      final currentUPrices = response['uprices'] as String?;
+      if (currentUPrices == null ||
+          currentUPrices.isEmpty ||
+          currentUPrices == 'null') {
+        print('Product $productId has no valid uprices data');
+        return;
+      }
+
       final List<dynamic> priceList = jsonDecode(currentUPrices);
 
       // Find the specific price item and add stock type
@@ -258,10 +266,14 @@ class ProductDetailsService {
         // For global_stock, only add to the specific item
         for (var priceItem in priceList) {
           final priceItemId = priceItem['id']?.toString();
-          print('Checking priceItem id: $priceItemId against uPriceId: $uPriceId');
+          print(
+            'Checking priceItem id: $priceItemId against uPriceId: $uPriceId',
+          );
           if (priceItemId == uPriceId) {
             priceItem[stockType] = '0'; // Initialize with 0
-            print('Added $stockType to price item $priceItemId in product $productId');
+            print(
+              'Added $stockType to price item $priceItemId in product $productId',
+            );
             found = true;
             break;
           }
@@ -688,7 +700,13 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
               .eq('id', productId)
               .single();
 
-      final currentUPrices = response['uprices'] as String;
+      final currentUPrices = response['uprices'] as String?;
+      if (currentUPrices == null ||
+          currentUPrices.isEmpty ||
+          currentUPrices == 'null') {
+        print('Product $productId has no valid uprices data');
+        return;
+      }
 
       // Parse the current uPrices JSON
       final List<dynamic> priceList = jsonDecode(currentUPrices);
@@ -873,7 +891,9 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
 
     if (double.tryParse(_priceController.text) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Price must be a valid number (e.g. 10.50)')),
+        const SnackBar(
+          content: Text('Price must be a valid number (e.g. 10.50)'),
+        ),
       );
       return false;
     }

@@ -199,18 +199,19 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
 
     final productBloc = BlocProvider.of<ProductBloc>(context);
     final String columnLower = widget.columnName.toLowerCase();
-    
+
     // For name and category1 filtering, preserve spaces exactly as typed
     final String processedValue =
         (columnLower == 'name' || columnLower == 'category1')
-            ? _controller.text.replaceAll('LIKE:', '') // Only remove LIKE: prefix
+            ? _controller.text.replaceAll(
+              'LIKE:',
+              '',
+            ) // Only remove LIKE: prefix
             : _controller.text.trim(); // For other columns, just trim
 
     // Add special handling for name and category1 columns to support partial matching
     if (columnLower == 'name' || columnLower == 'category1') {
-      print(
-        'Adding ${columnLower} filter with LIKE query: "$processedValue"',
-      );
+      print('Adding ${columnLower} filter with LIKE query: "$processedValue"');
       productBloc.add(
         FilterProductsByColumn(
           column: columnLower,
@@ -833,21 +834,25 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       // Parse the JSON string to get the number of price elements
       List<dynamic> priceList = [];
       try {
-        priceList = jsonDecode(product.uPrices);
+        if (product.uPrices.isEmpty || product.uPrices == 'null') {
+          priceList = [];
+        } else {
+          priceList = jsonDecode(product.uPrices);
+        }
       } catch (e) {
-        print('Error parsing uPrices JSON: $e');
-        // Fallback to showing the raw string if JSON parsing fails
-        return SelectableText(product.uPrices, style: style);
+        // Fallback to empty list if JSON parsing fails
+        priceList = [];
       }
 
       return LayoutBuilder(
         builder: (context, constraints) {
+          final displayText = priceList.isEmpty ? '[]' : product.uPrices;
           final content = Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              SelectableText(product.uPrices, style: style),
+              SelectableText(displayText, style: style),
               const SizedBox(height: 4),
               Wrap(
                 spacing: 2,

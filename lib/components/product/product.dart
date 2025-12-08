@@ -50,16 +50,21 @@ class Product extends Equatable {
   // Parse the uPrices JSON string and extract price information
   Map<String, dynamic>? get priceData {
     try {
-      if (uPrices.trim().startsWith('[') && uPrices.trim().endsWith(']')) {
+      if (uPrices.isEmpty || uPrices == 'null') {
+        return null;
+      }
+
+      final trimmed = uPrices.trim();
+
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
         // Handle array format like [{"price": "650", "unit": "1box","old_price":"700","limit": "2"}]
-        final List<dynamic> priceList = jsonDecode(uPrices) as List<dynamic>;
+        final List<dynamic> priceList = jsonDecode(trimmed) as List<dynamic>;
         if (priceList.isNotEmpty && priceList.first is Map<String, dynamic>) {
           return priceList.first as Map<String, dynamic>;
         }
-      } else if (uPrices.trim().startsWith('{') &&
-          uPrices.trim().endsWith('}')) {
+      } else if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
         // Handle object format like {"price": "650", "unit": "1box","old_price":"700","limit": "2"}
-        return jsonDecode(uPrices) as Map<String, dynamic>;
+        return jsonDecode(trimmed) as Map<String, dynamic>;
       }
     } catch (e) {
       // If JSON parsing fails, return null
@@ -117,50 +122,54 @@ class Product extends Equatable {
   }
 
   factory Product.fromJson(Map<String, dynamic> json) {
-    try {
-      // Handle null created_at field by using a fixed fallback date
-      DateTime createdAt;
-      if (json['created_at'] == null) {
-        createdAt = DateTime(2023, 1, 1);
-      } else {
-        createdAt = DateTime.parse(json['created_at'] as String);
-      }
-
-      // Handle the updated_at field
-      DateTime? updatedAt;
-      if (json['updated_at'] != null) {
-        try {
-          updatedAt = DateTime.parse(json['updated_at'] as String);
-        } catch (e) {
-          // If parsing fails, leave as null
-          updatedAt = null;
-        }
-      }
-
-      return Product(
-        id: json['id'] as int,
-        createdAt: createdAt,
-        updatedAt: updatedAt, // Add updatedAt to the constructor
-        name: json['name'] as String? ?? 'Unnamed Product',
-        uPrices:
-            json['uprices'] is String
-                ? json['uprices'] as String
-                : json['uprices'].toString(),
-        image: json['image'] as String?,
-        discount: json['discount'] as int?,
-        description: json['description'] as String?,
-        category1:
-            json['category_1'] as String?, // Direct access to category fields
-        category2:
-            json['category_2'] as String?, // Direct access to category fields
-        popularProduct: json['popular_product'] as bool? ?? false,
-        matchingWords: json['matching_words'] as String?,
-        production:
-            json['production'] as bool? ?? false, // Add production field
-      );
-    } catch (e) {
-      rethrow;
+    // Handle null created_at field by using a fixed fallback date
+    DateTime createdAt;
+    if (json['created_at'] == null) {
+      createdAt = DateTime(2023, 1, 1);
+    } else {
+      createdAt = DateTime.parse(json['created_at'] as String);
     }
+
+    // Handle the updated_at field
+    DateTime? updatedAt;
+    if (json['updated_at'] != null) {
+      try {
+        updatedAt = DateTime.parse(json['updated_at'] as String);
+      } catch (e) {
+        // If parsing fails, leave as null
+        updatedAt = null;
+      }
+    }
+
+    String processedUPrices;
+    if (json['uprices'] == null) {
+      processedUPrices = '[]';
+    } else if (json['uprices'] is String) {
+      final upricesStr = json['uprices'] as String;
+      if (upricesStr.isEmpty) {
+        processedUPrices = '[]';
+      } else {
+        processedUPrices = upricesStr;
+      }
+    } else {
+      processedUPrices = json['uprices'].toString();
+    }
+
+    return Product(
+      id: json['id'] as int,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      name: json['name'] as String? ?? 'Unnamed Product',
+      uPrices: processedUPrices,
+      image: json['image'] as String?,
+      discount: json['discount'] as int?,
+      description: json['description'] as String?,
+      category1: json['category_1'] as String?,
+      category2: json['category_2'] as String?,
+      popularProduct: json['popular_product'] as bool? ?? false,
+      matchingWords: json['matching_words'] as String?,
+      production: json['production'] as bool? ?? false,
+    );
   }
 
   @override

@@ -181,8 +181,7 @@ class ColumnVisibilityManager {
         onComplete();
       }
     } catch (e) {
-      print('Error loading column visibility preferences: $e');
-      // Fall back to SharedPreferences if database fails
+      // Silently fall back to SharedPreferences if database fails
       _loadFromSharedPreferences(onComplete: onComplete);
     }
   }

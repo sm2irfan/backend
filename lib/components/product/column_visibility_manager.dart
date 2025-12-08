@@ -206,7 +206,7 @@ class ColumnVisibilityManager {
         );
       }
     } catch (e) {
-      print('Error loading column visibility preferences: $e');
+      // Silently ignore errors loading preferences
     }
   }
 
