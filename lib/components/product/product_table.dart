@@ -275,6 +275,190 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
   }
 }
 
+// MARK: - Price Stock Filter Widget
+class PriceStockFilter extends StatefulWidget {
+  final int currentPage;
+  final int pageSize;
+  final Map<String, String> activeFilters;
+
+  const PriceStockFilter({
+    Key? key,
+    required this.currentPage,
+    required this.pageSize,
+    required this.activeFilters,
+  }) : super(key: key);
+
+  @override
+  State<PriceStockFilter> createState() => _PriceStockFilterState();
+}
+
+class _PriceStockFilterState extends State<PriceStockFilter> {
+  String? _selectedStockType; // 'sole_stock' or 'global_stock'
+  String?
+  _selectedValue; // '0' or '1' for sole_stock, any value for global_stock
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if there's an active uprices filter
+    if (widget.activeFilters.containsKey('uprices')) {
+      final filterValue = widget.activeFilters['uprices']!;
+      if (filterValue.startsWith('sole_stock:')) {
+        _selectedStockType = 'sole_stock';
+        _selectedValue = filterValue.substring('sole_stock:'.length);
+      } else if (filterValue.startsWith('global_stock:')) {
+        _selectedStockType = 'global_stock';
+        _selectedValue = filterValue.substring('global_stock:'.length);
+      }
+    }
+  }
+
+  void _applyFilter() {
+    if (!mounted) return;
+    if (_selectedStockType == null || _selectedValue == null) return;
+
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    final filterValue = '$_selectedStockType:$_selectedValue';
+
+    productBloc.add(
+      FilterProductsByColumn(
+        column: 'uprices',
+        value: filterValue,
+        page: 1,
+        pageSize: widget.pageSize,
+        filterType: 'json_contains',
+      ),
+    );
+  }
+
+  void _clearFilter() {
+    if (!mounted) return;
+
+    setState(() {
+      _selectedStockType = null;
+      _selectedValue = null;
+    });
+
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    productBloc.add(
+      FilterProductsByColumn(
+        column: 'uprices',
+        value: '',
+        page: 1,
+        pageSize: widget.pageSize,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasFilter = _selectedStockType != null && _selectedValue != null;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      width: 130, // Fixed width to prevent overflow
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Stock Type Dropdown
+            Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade400),
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.white,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedStockType,
+                  hint: const Text('Type', style: TextStyle(fontSize: 10)),
+                  isDense: true,
+                  icon: const Icon(Icons.arrow_drop_down, size: 14),
+                  style: const TextStyle(fontSize: 10, color: Colors.black),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'sole_stock',
+                      child: Text('Sole', style: TextStyle(fontSize: 10)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'global_stock',
+                      child: Text('Global', style: TextStyle(fontSize: 10)),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedStockType = value;
+                      _selectedValue = null; // Reset value when type changes
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Value Dropdown
+            if (_selectedStockType != null)
+              Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.white,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedValue,
+                    hint: const Text('Val', style: TextStyle(fontSize: 10)),
+                    isDense: true,
+                    icon: const Icon(Icons.arrow_drop_down, size: 14),
+                    style: const TextStyle(fontSize: 10, color: Colors.black),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '0',
+                        child: Text('0', style: TextStyle(fontSize: 10)),
+                      ),
+                      const DropdownMenuItem(
+                        value: '1',
+                        child: Text('1', style: TextStyle(fontSize: 10)),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'any',
+                        child: Text('Any', style: TextStyle(fontSize: 10)),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedValue = value;
+                      });
+                      _applyFilter();
+                    },
+                  ),
+                ),
+              ),
+            if (hasFilter) ...[
+              const SizedBox(width: 4),
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.clear, size: 12),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: _clearFilter,
+                  tooltip: 'Clear',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // MARK: - Main Product Table Widget
 
 /// Paginated product table with navigation controls
@@ -2008,7 +2192,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
       activeFilters = state.activeFilters;
     }
 
-    // Add filter input to the ID column (index 0), the Product name column (index 4), and Category 1 column (index 8)
+    // Add filter input to the ID column (index 0), the Product name column (index 4), Price column (index 5), and Category 1 column (index 8)
     Widget? filterWidget;
     if (index == 0) {
       filterWidget = ColumnFilterInput(
@@ -2026,6 +2210,13 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         width: 120, // Larger width for product name filter
         height: 30, // Adjust height if needed
         hintText: "Search by name", // Custom hint text
+      );
+    } else if (index == 5) {
+      // Price column filter for sole_stock and global_stock
+      filterWidget = PriceStockFilter(
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
       );
     } else if (index == 8) {
       filterWidget = ColumnFilterInput(

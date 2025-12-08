@@ -568,6 +568,30 @@ Then restart the application.
           }
         }
 
+        // Handle uprices filter for sole_stock and global_stock
+        if (filters.containsKey('uprices')) {
+          final String upricesFilter = filters['uprices']!.trim();
+
+          if (upricesFilter.isNotEmpty && upricesFilter.contains(':')) {
+            // Format: "sole_stock:0", "sole_stock:1", "global_stock:0", etc.
+            final parts = upricesFilter.split(':');
+            if (parts.length == 2) {
+              final stockType = parts[0]; // 'sole_stock' or 'global_stock'
+              final stockValue = parts[1]; // '0', '1', or 'any'
+
+              if (stockValue == 'any') {
+                // Match any product that has the stock type in uprices
+                conditions.add('uprices LIKE ?');
+                queryArgs.add('%"$stockType"%');
+              } else {
+                // Match specific value: "sole_stock":"0" or "sole_stock":"1"
+                conditions.add('uprices LIKE ?');
+                queryArgs.add('%"$stockType":"$stockValue"%');
+              }
+            }
+          }
+        }
+
         // Add more column filters here in the future
 
         if (conditions.isNotEmpty) {
