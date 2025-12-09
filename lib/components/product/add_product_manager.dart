@@ -74,10 +74,80 @@ class AddProductManager {
     }
   }
 
-  /// Cancel adding a new product
-  void cancelAddingNewProduct() {
-    onStateChanged(() {
-      isAddingNewProduct = false;
+  /// Cancel adding a new product with confirmation
+  void cancelAddingNewProduct(BuildContext context) {
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.info_outline,
+          color: Colors.blue,
+          size: 48,
+        ),
+        title: const Text(
+          'Cancel Adding Product',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to cancel adding this product?',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'All entered information will be lost.',
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Text(
+              'NO, CONTINUE',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Text(
+              'YES, CANCEL',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).then((confirmed) {
+      if (confirmed == true) {
+        onStateChanged(() {
+          isAddingNewProduct = false;
+        });
+      }
     });
   }
 
@@ -504,7 +574,7 @@ class AddProductManager {
         // Actions (shifted)
         return editManager.buildEditableActionCell(
           () => saveNewProduct(context),
-          cancelAddingNewProduct,
+          () => cancelAddingNewProduct(context),
         );
       default:
         return const SizedBox();
