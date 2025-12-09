@@ -21,12 +21,38 @@ class _MobileProductViewState extends State<MobileProductView> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _selectedCategory;
+  List<String> _categories = ['All'];
 
   @override
   void initState() {
     super.initState();
     print('===== MOBILE VIEW LOADED =====');
+    _loadCategories();
     _loadProducts();
+  }
+
+  void _loadCategories() async {
+    try {
+      final productBloc = BlocProvider.of<ProductBloc>(context);
+      final state = productBloc.state;
+      
+      if (state is ProductsLoaded) {
+        final allProducts = state.products;
+        final uniqueCategories = allProducts
+            .where((p) => p.category1 != null && p.category1!.isNotEmpty)
+            .map((p) => p.category1!)
+            .toSet()
+            .toList();
+        uniqueCategories.sort();
+        
+        setState(() {
+          _categories = ['All', ...uniqueCategories];
+        });
+      }
+    } catch (e) {
+      print('Error loading categories: $e');
+    }
   }
 
   void _performSearch() {
@@ -40,14 +66,21 @@ class _MobileProductViewState extends State<MobileProductView> {
 
   void _loadProducts() {
     final productBloc = BlocProvider.of<ProductBloc>(context);
-    if (_searchQuery.isEmpty) {
+    
+    // Priority: category filter > search query > all products
+    if (_selectedCategory != null && _selectedCategory != 'All') {
+      // Filter by category only
       productBloc.add(
-        LoadPaginatedProducts(
+        FilterProductsByColumn(
+          column: 'category1',
+          value: _selectedCategory!,
           page: _currentPage,
           pageSize: _pageSize,
+          filterType: 'equals',
         ),
       );
-    } else {
+    } else if (_searchQuery.isNotEmpty) {
+      // Filter by search query only
       productBloc.add(
         FilterProductsByColumn(
           column: 'name',
@@ -55,6 +88,14 @@ class _MobileProductViewState extends State<MobileProductView> {
           page: _currentPage,
           pageSize: _pageSize,
           filterType: 'like',
+        ),
+      );
+    } else {
+      // No filters
+      productBloc.add(
+        LoadPaginatedProducts(
+          page: _currentPage,
+          pageSize: _pageSize,
         ),
       );
     }
@@ -160,13 +201,79 @@ class _MobileProductViewState extends State<MobileProductView> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                SyncProductsButton(
-                  onSyncCompleted: () {
-                    setState(() {
-                      _currentPage = 1;
-                    });
-                    _loadProducts();
-                  },
+                // Category Filter and Sync Button in one row
+                Row(
+                  children: [
+                    // Category Filter Dropdown (left side)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.category, color: Colors.blue.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButton<String>(
+                                value: _selectedCategory ?? 'All',
+                                isExpanded: true,
+                                underline: const SizedBox(),
+                                hint: const Text('Filter by Category'),
+                                items: _categories.map((String category) {
+                                  return DropdownMenuItem<String>(
+                                    value: category,
+                                    child: Text(
+                                      category,
+                                      style: TextStyle(
+                                        fontWeight: category == 'All' ? FontWeight.bold : FontWeight.normal,
+                                        color: category == 'All' ? Colors.blue.shade700 : Colors.black87,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (String? newValue) {
+                                  setState(() {
+                                    _selectedCategory = newValue == 'All' ? null : newValue;
+                                    _currentPage = 1;
+                                  });
+                                  _loadProducts();
+                                },
+                              ),
+                            ),
+                            if (_selectedCategory != null && _selectedCategory != 'All')
+                              IconButton(
+                                icon: const Icon(Icons.clear, size: 20),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedCategory = null;
+                                    _currentPage = 1;
+                                  });
+                                  _loadProducts();
+                                },
+                                tooltip: 'Clear filter',
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Sync Button (right side)
+                    SyncProductsButton(
+                      onSyncCompleted: () {
+                        setState(() {
+                          _currentPage = 1;
+                        });
+                        _loadCategories();
+                        _loadProducts();
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
