@@ -113,6 +113,22 @@ class AppDrawer extends StatelessWidget {
           ),
           _buildNavItem(
             context,
+            icon: Icons.phone_android,
+            title: 'Mobile View',
+            isActive: currentPage == 'Mobile View',
+            onTap: () {
+              onPageSelected('Mobile View');
+              Navigator.pop(context);
+              // Use pushNamedAndRemoveUntil to avoid empty history issues
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.mobileProducts,
+                (_) => false, // Clear the entire stack
+              );
+            },
+          ),
+          _buildNavItem(
+            context,
             icon: Icons.shopping_cart,
             title: 'Orders',
             isActive: currentPage == 'Orders',

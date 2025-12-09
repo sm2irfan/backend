@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async';
 import 'components/image_upload/image_upload_page.dart';
 import 'components/product/product_ui.dart'; // Import ProductUI instead of product.dart
+import 'components/product/product.dart';
 import 'components/product/purchase_details_page.dart';
+import 'components/product/mobile_product_view.dart';
 import 'components/auth/login_page.dart';
 import 'components/auth/auth_service.dart';
 import 'data/local_database.dart';
@@ -15,6 +18,7 @@ class AppRoutes {
   static const String imageUpload = '/image_upload';
   static const String purchaseDetails = '/purchase_details';
   static const String login = '/login';
+  static const String mobileProducts = '/mobile_products';
 }
 
 void main() async {
@@ -147,7 +151,7 @@ class _AppRootState extends State<AppRoot> {
       }
 
       print(
-        '[BUILD] Showing main app with initialRoute: ${_isAuthenticated ? AppRoutes.products : AppRoutes.login}',
+        '[BUILD] Showing main app with initialRoute: ${_isAuthenticated ? AppRoutes.mobileProducts : AppRoutes.login}',
       );
       return MaterialApp(
         title: 'Product Management App',
@@ -163,12 +167,25 @@ class _AppRootState extends State<AppRoot> {
         ),
         debugShowCheckedModeBanner: false,
         // Use home instead of initialRoute to avoid route initialization issues
-        home: _isAuthenticated ? const ProductDashboard() : const LoginPage(),
+        home: _isAuthenticated
+            ? BlocProvider(
+                create: (context) => ProductBloc(
+                  ProductRepository(),
+                )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                child: const MobileProductView(),
+              )
+            : const LoginPage(),
         routes: {
           AppRoutes.products: (context) => const ProductDashboard(),
           AppRoutes.imageUpload: (context) => const ImageUploadPage(),
           AppRoutes.purchaseDetails: (context) => const PurchaseDetailsPage(),
           AppRoutes.login: (context) => const LoginPage(),
+          AppRoutes.mobileProducts: (context) => BlocProvider(
+                create: (context) => ProductBloc(
+                  ProductRepository(),
+                )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                child: const MobileProductView(),
+              ),
         },
         onGenerateRoute: (settings) {
           try {
@@ -185,6 +202,15 @@ class _AppRootState extends State<AppRoot> {
               case AppRoutes.purchaseDetails:
                 return MaterialPageRoute(
                   builder: (_) => const PurchaseDetailsPage(),
+                );
+              case AppRoutes.mobileProducts:
+                return MaterialPageRoute(
+                  builder: (_) => BlocProvider(
+                    create: (context) => ProductBloc(
+                      ProductRepository(),
+                    )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                    child: const MobileProductView(),
+                  ),
                 );
               case AppRoutes.login:
                 return MaterialPageRoute(builder: (_) => const LoginPage());
