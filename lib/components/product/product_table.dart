@@ -75,28 +75,61 @@ class _RefreshButtonState extends State<RefreshButton> {
           }
         }
       },
-      child: Tooltip(
-        message: 'Refresh current page data',
-        child: ElevatedButton.icon(
-          onPressed: _isRefreshing ? null : _refreshData,
-          icon:
-              _isRefreshing
-                  ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                  : const Icon(Icons.refresh),
-          label: const Text('Refresh'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blueAccent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Show All button
+          Tooltip(
+            message: 'Load all products without filters',
+            child: ElevatedButton.icon(
+              onPressed: _loadAllProducts,
+              icon: const Icon(Icons.list),
+              label: const Text('Show All'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          // Refresh button
+          Tooltip(
+            message: 'Refresh current page data',
+            child: ElevatedButton.icon(
+              onPressed: _isRefreshing ? null : _refreshData,
+              icon:
+                  _isRefreshing
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                      : const Icon(Icons.refresh),
+              label: const Text('Refresh'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Load all products without any filters
+  void _loadAllProducts() {
+    if (!mounted) return;
+    
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    productBloc.add(
+      LoadPaginatedProducts(
+        page: 1,
+        pageSize: widget.pageSize,
       ),
     );
   }
@@ -112,6 +145,7 @@ class ColumnFilterInput extends StatefulWidget {
   final double width;
   final double height;
   final String? hintText;
+  final Function(String column, String value)? onFilterChanged; // Callback for pending filters
 
   const ColumnFilterInput({
     Key? key,
@@ -122,6 +156,7 @@ class ColumnFilterInput extends StatefulWidget {
     this.width = 60, // Default width
     this.height = 25, // Default height
     this.hintText,
+    this.onFilterChanged, // Optional callback
   }) : super(key: key);
 
   @override
@@ -209,9 +244,15 @@ class _ColumnFilterInputState extends State<ColumnFilterInput> {
             ) // Only remove LIKE: prefix
             : _controller.text.trim(); // For other columns, just trim
 
+    // If callback is provided, use pending filter system
+    if (widget.onFilterChanged != null) {
+      widget.onFilterChanged!(columnLower, processedValue);
+      return;
+    }
+
+    // Otherwise, apply filter immediately (legacy behavior)
     // Add special handling for name and category1 columns to support partial matching
     if (columnLower == 'name' || columnLower == 'category1') {
-      print('Adding ${columnLower} filter with LIKE query: "$processedValue"');
       productBloc.add(
         FilterProductsByColumn(
           column: columnLower,
@@ -280,12 +321,14 @@ class PriceStockFilter extends StatefulWidget {
   final int currentPage;
   final int pageSize;
   final Map<String, String> activeFilters;
+  final Function(String column, String value)? onFilterChanged; // Callback for pending filters
 
   const PriceStockFilter({
     Key? key,
     required this.currentPage,
     required this.pageSize,
     required this.activeFilters,
+    this.onFilterChanged, // Optional callback
   }) : super(key: key);
 
   @override
@@ -317,8 +360,16 @@ class _PriceStockFilterState extends State<PriceStockFilter> {
     if (!mounted) return;
     if (_selectedStockType == null || _selectedValue == null) return;
 
-    final productBloc = BlocProvider.of<ProductBloc>(context);
     final filterValue = '$_selectedStockType:$_selectedValue';
+
+    // If callback is provided, use pending filter system
+    if (widget.onFilterChanged != null) {
+      widget.onFilterChanged!('uprices', filterValue);
+      return;
+    }
+
+    // Otherwise, apply filter immediately (legacy behavior)
+    final productBloc = BlocProvider.of<ProductBloc>(context);
 
     productBloc.add(
       FilterProductsByColumn(
@@ -459,6 +510,156 @@ class _PriceStockFilterState extends State<PriceStockFilter> {
   }
 }
 
+// MARK: - Production Filter Widget
+class ProductionFilter extends StatefulWidget {
+  final int currentPage;
+  final int pageSize;
+  final Map<String, String> activeFilters;
+  final Function(String column, String value)? onFilterChanged; // Callback for pending filters
+
+  const ProductionFilter({
+    Key? key,
+    required this.currentPage,
+    required this.pageSize,
+    required this.activeFilters,
+    this.onFilterChanged, // Optional callback
+  }) : super(key: key);
+
+  @override
+  State<ProductionFilter> createState() => _ProductionFilterState();
+}
+
+class _ProductionFilterState extends State<ProductionFilter> {
+  String? _selectedValue; // 'yes', 'no', or 'all'
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if there's an active production filter
+    if (widget.activeFilters.containsKey('production')) {
+      _selectedValue = widget.activeFilters['production'];
+    }
+  }
+
+  void _applyFilter() {
+    if (!mounted) return;
+    if (_selectedValue == null || _selectedValue == 'all') return;
+
+    // If callback is provided, use pending filter system
+    if (widget.onFilterChanged != null) {
+      widget.onFilterChanged!('production', _selectedValue!);
+      return;
+    }
+
+    // Otherwise, apply filter immediately (legacy behavior)
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+
+    productBloc.add(
+      FilterProductsByColumn(
+        column: 'production',
+        value: _selectedValue!,
+        page: 1,
+        pageSize: widget.pageSize,
+      ),
+    );
+  }
+
+  void _clearFilter() {
+    if (!mounted) return;
+
+    setState(() {
+      _selectedValue = null;
+    });
+
+    // If callback is provided, clear pending filter
+    if (widget.onFilterChanged != null) {
+      widget.onFilterChanged!('production', '');
+      return;
+    }
+
+    // Otherwise, clear filter immediately (legacy behavior)
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    productBloc.add(
+      FilterProductsByColumn(
+        column: 'production',
+        value: '',
+        page: 1,
+        pageSize: widget.pageSize,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasFilter = _selectedValue != null && _selectedValue != 'all';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      width: 100, // Fixed width
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Production Dropdown
+          Expanded(
+            child: Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade400),
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.white,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedValue,
+                  hint: const Text('All', style: TextStyle(fontSize: 11)),
+                  isDense: true,
+                  icon: const Icon(Icons.arrow_drop_down, size: 16),
+                  style: const TextStyle(fontSize: 11, color: Colors.black),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text('All', style: TextStyle(fontSize: 11)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'yes',
+                      child: Text('Yes', style: TextStyle(fontSize: 11)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'no',
+                      child: Text('No', style: TextStyle(fontSize: 11)),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedValue = value;
+                    });
+                    _applyFilter();
+                  },
+                ),
+              ),
+            ),
+          ),
+          if (hasFilter) ...[
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: IconButton(
+                icon: const Icon(Icons.clear, size: 12),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: _clearFilter,
+                tooltip: 'Clear',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 // MARK: - Main Product Table Widget
 
 /// Paginated product table with navigation controls
@@ -516,6 +717,9 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
   // Table dimensions manager
   late TableDimensionsManager _dimensionsManager;
+
+  // Pending filters for AND filtering - stores filter selections before applying
+  final Map<String, String> _pendingFilters = {};
 
   // Column titles
   final List<String> _titles = [
@@ -609,6 +813,40 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
     }
   }
 
+  // Update pending filter (called by filter widgets)
+  void _updatePendingFilter(String column, String value) {
+    setState(() {
+      if (value.isEmpty) {
+        _pendingFilters.remove(column);
+      } else {
+        _pendingFilters[column] = value;
+      }
+    });
+  }
+
+  // Apply all pending filters with AND logic
+  void _applyPendingFilters() {
+    if (_pendingFilters.isEmpty) return;
+    
+    final productBloc = BlocProvider.of<ProductBloc>(context);
+    
+    // Use the new ApplyMultipleFilters event to apply all filters at once
+    productBloc.add(
+      ApplyMultipleFilters(
+        filters: Map.from(_pendingFilters),
+        page: 1,
+        pageSize: widget.pageSize,
+      ),
+    );
+  }
+
+  // Clear all pending filters
+  void _clearPendingFilters() {
+    setState(() {
+      _pendingFilters.clear();
+    });
+  }
+
   void _initializeColumnWidths() {
     var initialWidths = _tableConfig.initializeColumnWidths();
     _columnWidths = List<double>.from(initialWidths);
@@ -658,6 +896,37 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                     const SizedBox(width: 8),
                     // Replace the Add Product button with the one from the manager
                     _addProductManager.buildAddProductButton(),
+                    const SizedBox(width: 8),
+                    // Apply Filters button
+                    ElevatedButton.icon(
+                      onPressed: _pendingFilters.isEmpty ? null : _applyPendingFilters,
+                      icon: const Icon(Icons.filter_list),
+                      label: Text(
+                        _pendingFilters.isEmpty 
+                          ? 'Apply Filters' 
+                          : 'Apply Filters (${_pendingFilters.length})',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Clear button (only show when there are pending filters)
+                    if (_pendingFilters.isNotEmpty)
+                      ElevatedButton.icon(
+                        onPressed: _clearPendingFilters,
+                        icon: const Icon(Icons.clear),
+                        label: const Text('Clear'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ),
+                      ),
+                    if (_pendingFilters.isNotEmpty)
+                      const SizedBox(width: 8),
                   ],
                 ),
                 RefreshButton(
@@ -2200,6 +2469,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         currentPage: widget.currentPage,
         pageSize: widget.pageSize,
         activeFilters: activeFilters,
+        onFilterChanged: _updatePendingFilter, // Add callback
       );
     } else if (index == 4) {
       filterWidget = ColumnFilterInput(
@@ -2210,6 +2480,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         width: 120, // Larger width for product name filter
         height: 30, // Adjust height if needed
         hintText: "Search by name", // Custom hint text
+        onFilterChanged: _updatePendingFilter, // Add callback
       );
     } else if (index == 5) {
       // Price column filter for sole_stock and global_stock
@@ -2217,6 +2488,7 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         currentPage: widget.currentPage,
         pageSize: widget.pageSize,
         activeFilters: activeFilters,
+        onFilterChanged: _updatePendingFilter, // Add callback
       );
     } else if (index == 8) {
       filterWidget = ColumnFilterInput(
@@ -2227,6 +2499,15 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
         width: 100, // Width for category filter
         height: 30, // Adjust height if needed
         hintText: "Filter category", // Custom hint text
+        onFilterChanged: _updatePendingFilter, // Add callback
+      );
+    } else if (index == 11) {
+      // Production column filter
+      filterWidget = ProductionFilter(
+        currentPage: widget.currentPage,
+        pageSize: widget.pageSize,
+        activeFilters: activeFilters,
+        onFilterChanged: _updatePendingFilter, // Add callback
       );
     }
 

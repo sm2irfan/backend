@@ -336,6 +336,22 @@ class FilterProductsByColumn extends ProductEvent {
   ];
 }
 
+// Event for applying multiple filters at once with AND logic
+class ApplyMultipleFilters extends ProductEvent {
+  final Map<String, String> filters;
+  final int page;
+  final int pageSize;
+
+  const ApplyMultipleFilters({
+    required this.filters,
+    required this.page,
+    required this.pageSize,
+  });
+
+  @override
+  List<Object> get props => [filters, page, pageSize];
+}
+
 // Updated BLoC States
 abstract class ProductState extends Equatable {
   const ProductState();
@@ -404,6 +420,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     on<RefreshCurrentPage>(_onRefreshCurrentPage);
     on<UpdateProductStock>(_onUpdateProductStock);
     on<FilterProductsByColumn>(_onFilterProductsByColumn); // Add new handler
+    on<ApplyMultipleFilters>(_onApplyMultipleFilters); // Add handler for multiple filters
   }
 
   Future<void> _onLoadProducts(
@@ -726,6 +743,58 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       );
     } catch (e) {
       print('Error processing name filter: $e');
+      emit(ProductError(e.toString()));
+    }
+  }
+
+  // Handler for applying multiple filters at once with AND logic
+  Future<void> _onApplyMultipleFilters(
+    ApplyMultipleFilters event,
+    Emitter<ProductState> emit,
+  ) async {
+    print('Processing multiple filters with AND logic: ${event.filters}');
+    emit(const ProductLoading(isFirstLoad: false));
+
+    try {
+      // Process filters to add proper prefixes for LIKE queries
+      Map<String, String> processedFilters = {};
+      
+      for (var entry in event.filters.entries) {
+        final column = entry.key;
+        final value = entry.value;
+        
+        // Add LIKE: prefix for name and category1 columns if not already present
+        if ((column == 'name' || column == 'category1') && !value.startsWith('LIKE:')) {
+          processedFilters[column] = 'LIKE:$value';
+        } else {
+          processedFilters[column] = value;
+        }
+      }
+
+      print('Processed filters with proper prefixes: $processedFilters');
+      print('Fetching products with multiple AND filters');
+
+      final result = await _productRepository.getPaginatedProducts(
+        event.page,
+        event.pageSize,
+        filters: processedFilters,
+      );
+
+      print('Fetched ${result['products'].length} products with AND filters');
+
+      emit(
+        ProductsLoaded(
+          products: result['products'],
+          totalItems: result['totalItems'],
+          currentPage: event.page,
+          hasNextPage: result['hasNextPage'],
+          hasPreviousPage: result['hasPreviousPage'],
+          activeFilters: processedFilters,
+        ),
+      );
+      print('Emitted new state with ${result['products'].length} products using AND logic');
+    } catch (e) {
+      print('Error processing multiple filters: $e');
       emit(ProductError(e.toString()));
     }
   }

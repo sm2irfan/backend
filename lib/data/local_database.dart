@@ -568,7 +568,7 @@ Then restart the application.
           }
         }
 
-        // Handle uprices filter for sole_stock and global_stock
+        // Handle uprices filter for sole_stock and global_stock with comprehensive spacing patterns
         if (filters.containsKey('uprices')) {
           final String upricesFilter = filters['uprices']!.trim();
 
@@ -584,11 +584,42 @@ Then restart the application.
                 conditions.add('uprices LIKE ?');
                 queryArgs.add('%"$stockType"%');
               } else {
-                // Match specific value: "sole_stock":"0" or "sole_stock":"1"
-                conditions.add('uprices LIKE ?');
-                queryArgs.add('%"$stockType":"$stockValue"%');
+                // Match specific value with ALL possible spacing variations
+                // Handles: "key":"val", "key": "val", "key" :"val", "key" : "val", etc.
+                final spacingPatterns = [
+                  '%"$stockType":"$stockValue"%',           // "key":"val" - no spaces
+                  '%"$stockType": "$stockValue"%',          // "key": "val" - space after colon
+                  '%"$stockType" :"$stockValue"%',          // "key" :"val" - space before colon
+                  '%"$stockType" : "$stockValue"%',         // "key" : "val" - spaces both sides
+                  '%"$stockType":  "$stockValue"%',          // "key":  "val" - double space after
+                  '%"$stockType"  :"$stockValue"%',          // "key"  :"val" - double space before
+                  '%"$stockType"  :  "$stockValue"%',        // "key"  :  "val" - double spaces both
+                  '%"$stockType"   :   "$stockValue"%',      // "key"   :   "val" - triple spaces
+                ];
+                
+                // Create OR clause to match any spacing pattern
+                final orConditions = List.filled(spacingPatterns.length, 'uprices LIKE ?').join(' OR ');
+                conditions.add('($orConditions)');
+                queryArgs.addAll(spacingPatterns);
               }
             }
+          }
+        }
+
+        // Handle production filter
+        if (filters.containsKey('production')) {
+          final String productionFilter = filters['production']!.trim();
+          
+          if (productionFilter.isNotEmpty) {
+            // Convert 'yes'/'no' to boolean (stored as INTEGER 1/0 in SQLite)
+            if (productionFilter == 'yes') {
+              conditions.add('production = ?');
+              queryArgs.add(1);
+            } else if (productionFilter == 'no') {
+              conditions.add('production = ?');
+              queryArgs.add(0);
+            }
+            // If 'all' or empty, don't add filter
           }
         }
 
