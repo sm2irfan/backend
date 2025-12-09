@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'mobile_product_details_dialog.dart';
 
 /// Model for ProductDetails from Supabase
 class ProductDetails {
@@ -596,21 +597,44 @@ class ProductDetailsButtonHandler {
     required List<ProductDetails> productDetailsList,
     VoidCallback? onStockUpdated,
   }) {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return ProductDetailsDialog(
-          productName: productName,
-          compositeId: compositeId,
-          productDetailsList: productDetailsList,
-          onStockUpdated: onStockUpdated,
-        );
-      },
-    );
+    // Check if we're on a mobile device
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    if (isMobile) {
+      // Show mobile-optimized version
+      return showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return MobileProductDetailsDialog(
+            productName: productName,
+            compositeId: compositeId,
+            productDetailsList: productDetailsList,
+            onStockUpdated: onStockUpdated,
+          );
+        },
+      );
+    } else {
+      // Show desktop table version
+      return showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return ProductDetailsDialog(
+            productName: productName,
+            compositeId: compositeId,
+            productDetailsList: productDetailsList,
+            onStockUpdated: onStockUpdated,
+          );
+        },
+      );
+    }
   }
 }
 
-/// Stateful widget for product details dialog with add/edit functionality
+
+
+/// Desktop product details dialog - now imported from desktop_product_details_dialog.dart
+/// Keeping the implementation here temporarily for reference
 class ProductDetailsDialog extends StatefulWidget {
   final String productName;
   final String compositeId;

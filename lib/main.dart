@@ -1,7 +1,9 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'components/image_upload/image_upload_page.dart';
 import 'components/product/product_ui.dart'; // Import ProductUI instead of product.dart
 import 'components/product/product.dart';
@@ -19,6 +21,7 @@ class AppRoutes {
   static const String purchaseDetails = '/purchase_details';
   static const String login = '/login';
   static const String mobileProducts = '/mobile_products';
+  static const String mobileProductDetail = '/mobile_product_detail';
 }
 
 void main() async {
@@ -150,8 +153,11 @@ class _AppRootState extends State<AppRoot> {
         );
       }
 
+      // Determine if running on mobile platform
+      final bool isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+      
       print(
-        '[BUILD] Showing main app with initialRoute: ${_isAuthenticated ? AppRoutes.mobileProducts : AppRoutes.login}',
+        '[BUILD] Showing main app - Platform: ${isMobile ? "Mobile" : "Desktop"}, isAuthenticated: $_isAuthenticated',
       );
       return MaterialApp(
         title: 'Product Management App',
@@ -168,12 +174,14 @@ class _AppRootState extends State<AppRoot> {
         debugShowCheckedModeBanner: false,
         // Use home instead of initialRoute to avoid route initialization issues
         home: _isAuthenticated
-            ? BlocProvider(
-                create: (context) => ProductBloc(
-                  ProductRepository(),
-                )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
-                child: const MobileProductView(),
-              )
+            ? (isMobile
+                ? BlocProvider(
+                    create: (context) => ProductBloc(
+                      ProductRepository(),
+                    )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                    child: const MobileProductView(),
+                  )
+                : const ProductDashboard())
             : const LoginPage(),
         routes: {
           AppRoutes.products: (context) => const ProductDashboard(),

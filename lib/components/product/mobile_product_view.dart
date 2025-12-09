@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'product.dart';
 import 'sync_products_button.dart';
+import 'product_details.dart';
+import 'mobile_product_detail_page.dart';
 
 /// Mobile-friendly product view with vertical scrolling and pagination
 class MobileProductView extends StatefulWidget {
@@ -338,14 +342,24 @@ class _MobileProductViewState extends State<MobileProductView> {
         ? Colors.blue.shade200 
         : Colors.green.shade200;
     
-    return Card(
-      elevation: 4,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: borderColor, width: 2),
-      ),
-      child: Container(
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MobileProductDetailPage(product: product),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        elevation: 4,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: borderColor, width: 2),
+        ),
+        child: Container(
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(12),
@@ -366,18 +380,62 @@ class _MobileProductViewState extends State<MobileProductView> {
                   children: [
                     const Icon(Icons.tag, color: Colors.white, size: 18),
                     const SizedBox(width: 8),
-                    Text(
-                      'Product ID: ${product.id}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    Expanded(
+                      child: Text(
+                        'Product ID: ${product.id}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
+              // Product image
+              if (product.image != null && product.image!.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300, width: 1),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: product.image!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                      errorWidget: (context, url, error) => Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.broken_image, 
+                              size: 48, 
+                              color: Colors.grey.shade400
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Image not available',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               _buildAttributeRow('Name', product.name, Icons.shopping_bag, isEven),
               _buildAttributeRow('Category', product.category1 ?? 'N/A', Icons.category, isEven),
               _buildAttributeRow('Description', product.description ?? 'N/A', Icons.description, isEven),
@@ -387,12 +445,315 @@ class _MobileProductViewState extends State<MobileProductView> {
               _buildAttributeRow('Discount', product.discount != null ? '${product.discount}%' : 'None', Icons.local_offer, isEven),
               _buildAttributeRow('Popular', product.popularProduct ? 'Yes' : 'No', Icons.star, isEven),
               _buildAttributeRow('Image URL', product.image ?? 'No image', Icons.image, isEven, isUrl: true),
-              _buildAttributeRow('Prices (JSON)', product.uPrices.isNotEmpty ? product.uPrices : 'N/A', Icons.attach_money, isEven, isPrice: true),
+              _buildPriceButtonsRow(product, isEven),
             ],
           ),
         ),
       ),
+    ),
     );
+  }
+
+  Widget _buildPriceButtonsRow(Product product, bool isEven) {
+    final textColor = isEven ? Colors.blue.shade900 : Colors.green.shade900;
+    final iconColor = isEven ? Colors.blue.shade600 : Colors.green.shade600;
+    
+    // Parse the JSON string to get the price list
+    List<dynamic> priceList = [];
+    try {
+      if (product.uPrices.isEmpty || product.uPrices == 'null') {
+        priceList = [];
+      } else {
+        priceList = jsonDecode(product.uPrices);
+      }
+    } catch (e) {
+      priceList = [];
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade300,
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.attach_money, size: 16, color: iconColor),
+              const SizedBox(width: 8),
+              Text(
+                'Prices',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: priceList.isEmpty
+                ? const Text(
+                    'No prices available',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _buildPriceButtons(priceList, product),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildPriceButtons(List<dynamic> priceList, Product product) {
+    // Check if ANY element has global_stock
+    bool hasGlobalStock = false;
+    int globalStockValue = 0;
+    Map<String, dynamic>? globalStockItem;
+
+    for (var priceItem in priceList) {
+      if (priceItem is Map<String, dynamic>) {
+        if (priceItem.containsKey('global_stock') &&
+            priceItem['global_stock'] != null) {
+          int stockValue =
+              int.tryParse(priceItem['global_stock'].toString()) ?? 0;
+          hasGlobalStock = true;
+          globalStockValue = stockValue;
+          globalStockItem = priceItem;
+          break;
+        }
+      }
+    }
+
+    // If global_stock exists, show only one button
+    if (hasGlobalStock && globalStockItem != null) {
+      final stockItem = globalStockItem;
+      final price = stockItem['price'] ?? '';
+      final unit = stockItem['unit'] ?? '';
+      final priceItemId = stockItem['id'];
+      final hasId = priceItemId != null && priceItemId.toString().isNotEmpty;
+
+      return [
+        ElevatedButton(
+          onPressed: hasId ? () async {
+            await ProductDetailsButtonHandler.handlePriceButtonClick(
+              context: context,
+              productId: product.id,
+              productName: product.name,
+              priceItem: stockItem,
+              priceIndex: 0,
+              onStockTypeAdded: () {
+                // No need to update stock in mobile view (read-only)
+              },
+              onDataFetched: (List<ProductDetails> productDetailsList) {
+                ProductDetailsButtonHandler.showProductDetailsDialog(
+                  context: context,
+                  productName: product.name,
+                  compositeId: ProductDetailsService.generateCompositeId(
+                    product.id,
+                    priceItemId.toString(),
+                  ),
+                  productDetailsList: productDetailsList,
+                  onStockUpdated: () {
+                    // No stock update in mobile view (read-only)
+                  },
+                );
+              },
+              onError: (String error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error), backgroundColor: Colors.red),
+                  );
+                }
+              },
+            );
+          } : null,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            backgroundColor: hasId ? Colors.green.shade100 : Colors.grey.shade300,
+            side: BorderSide(
+              color: hasId ? Colors.green.shade400 : Colors.grey.shade400,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!hasId)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Icon(Icons.warning, size: 14, color: Colors.red.shade800),
+                    ),
+                  Text(
+                    '$price/$unit',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: hasId ? Colors.green.shade900 : Colors.red.shade800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Global Stock: $globalStockValue',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: hasId ? Colors.green.shade700 : Colors.red.shade700,
+                ),
+              ),
+              if (!hasId)
+                const Text(
+                  'Missing ID',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    // No global stock - show buttons for all price items
+    return List.generate(priceList.length, (index) {
+      final priceItem = priceList[index];
+      final price = priceItem['price'] ?? '';
+      final unit = priceItem['unit'] ?? '';
+      final oldPrice = priceItem['old_price'];
+      final priceItemId = priceItem['id'];
+      final hasId = priceItemId != null && priceItemId.toString().isNotEmpty;
+
+      // Get stock information
+      String stockText = '';
+      if (priceItem.containsKey('sole_stock') &&
+          priceItem['sole_stock'] != null &&
+          priceItem['sole_stock'].toString().isNotEmpty) {
+        stockText = 'Sole: ${priceItem['sole_stock']}';
+      } else if (priceItem.containsKey('stock') &&
+          priceItem['stock'] != null &&
+          priceItem['stock'].toString().isNotEmpty) {
+        stockText = 'Stock: ${priceItem['stock']}';
+      }
+
+      return ElevatedButton(
+        onPressed: hasId ? () async {
+          await ProductDetailsButtonHandler.handlePriceButtonClick(
+            context: context,
+            productId: product.id,
+            productName: product.name,
+            priceItem: priceItem,
+            priceIndex: index,
+            onStockTypeAdded: () {
+              // No need to update in mobile view (read-only)
+            },
+            onDataFetched: (List<ProductDetails> productDetailsList) {
+              ProductDetailsButtonHandler.showProductDetailsDialog(
+                context: context,
+                productName: product.name,
+                compositeId: ProductDetailsService.generateCompositeId(
+                  product.id,
+                  priceItemId.toString(),
+                ),
+                productDetailsList: productDetailsList,
+                onStockUpdated: () {
+                  // No stock update in mobile view (read-only)
+                },
+              );
+            },
+            onError: (String error) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(error), backgroundColor: Colors.red),
+                );
+              }
+            },
+          );
+        } : null,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          backgroundColor:
+              !hasId
+                  ? Colors.grey.shade300
+                  : oldPrice != null
+                  ? Colors.orange.shade100
+                  : Colors.blue.shade50,
+          side: BorderSide(
+            color:
+                !hasId
+                    ? Colors.grey.shade400
+                    : oldPrice != null
+                    ? Colors.orange.shade400
+                    : Colors.blue.shade300,
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!hasId)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(Icons.warning, size: 14, color: Colors.red.shade800),
+                  ),
+                Text(
+                  '$price/$unit',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: !hasId ? Colors.red.shade800 : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            if (stockText.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                stockText,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: hasId ? Colors.green.shade700 : Colors.red.shade700,
+                ),
+              ),
+            ],
+            if (!hasId)
+              const Text(
+                'Missing ID',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildAttributeRow(String label, String value, IconData icon, bool isEven, {bool isUrl = false, bool isPrice = false}) {
