@@ -1,19 +1,123 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'product.dart';
 import 'product_details.dart';
 
 /// Mobile-friendly product detail page showing full product information
-class MobileProductDetailPage extends StatelessWidget {
+class MobileProductDetailPage extends StatefulWidget {
   final Product product;
 
   const MobileProductDetailPage({super.key, required this.product});
 
   @override
+  State<MobileProductDetailPage> createState() => _MobileProductDetailPageState();
+}
+
+class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
+  late TextEditingController _pricesJsonController;
+  bool _isEditing = false;
+  bool _isSaving = false;
+  late bool _production;
+  late bool _popularProduct;
+
+  @override
+  void initState() {
+    super.initState();
+    _pricesJsonController = TextEditingController(text: _formatJson(widget.product.uPrices));
+    _production = widget.product.production;
+    _popularProduct = widget.product.popularProduct;
+  }
+
+  @override
+  void dispose() {
+    _pricesJsonController.dispose();
+    super.dispose();
+  }
+
+  String _formatJson(String jsonString) {
+    if (jsonString.isEmpty || jsonString == 'null') {
+      return '[]';
+    }
+    try {
+      final decoded = jsonDecode(jsonString);
+      const encoder = JsonEncoder.withIndent('  ');
+      return encoder.convert(decoded);
+    } catch (e) {
+      return jsonString;
+    }
+  }
+
+  bool _validateJson(String jsonString) {
+    try {
+      jsonDecode(jsonString);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _saveJson() async {
+    final jsonText = _pricesJsonController.text.trim();
+    
+    // Validate JSON
+    if (!_validateJson(jsonText)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid JSON format! Please check your syntax.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // Update in Supabase
+      await Supabase.instance.client
+          .from('pre_all_products')
+          .update({
+            'uprices': jsonText,
+            'production': _production,
+            'popular_product': _popularProduct,
+          })
+          .eq('id', widget.product.id);
+
+      setState(() {
+        _isEditing = false;
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Product updated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving product: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('📱 ${product.name}'),
+        title: Text('📱 ${widget.product.name}'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
@@ -49,12 +153,16 @@ class MobileProductDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             
+            // Editable Prices JSON Section
+            _buildEditablePricesJson(),
+            const SizedBox(height: 16),
+            
             // Product Header Card
             _buildHeaderCard(),
             const SizedBox(height: 16),
             
             // Product Image
-            if (product.image != null && product.image!.isNotEmpty)
+            if (widget.product.image != null && widget.product.image!.isNotEmpty)
               _buildImageSection(),
             
             const SizedBox(height: 16),
@@ -63,12 +171,12 @@ class MobileProductDetailPage extends StatelessWidget {
             _buildSectionTitle('Basic Information', Icons.info_outline),
             const SizedBox(height: 8),
             _buildInfoCard([
-              _buildInfoRow('Product ID', '#${product.id}', Icons.tag),
-              _buildInfoRow('Name', product.name, Icons.shopping_bag),
-              _buildInfoRow('Category', product.category1 ?? 'N/A', Icons.category),
-              if (product.category2 != null && product.category2!.isNotEmpty)
-                _buildInfoRow('Category 2', product.category2!, Icons.category_outlined),
-              _buildInfoRow('Description', product.description ?? 'N/A', Icons.description),
+              _buildInfoRow('Product ID', '#${widget.product.id}', Icons.tag),
+              _buildInfoRow('Name', widget.product.name, Icons.shopping_bag),
+              _buildInfoRow('Category', widget.product.category1 ?? 'N/A', Icons.category),
+              if (widget.product.category2 != null && widget.product.category2!.isNotEmpty)
+                _buildInfoRow('Category 2', widget.product.category2!, Icons.category_outlined),
+              _buildInfoRow('Description', widget.product.description ?? 'N/A', Icons.description),
             ]),
             
             const SizedBox(height: 16),
@@ -76,11 +184,7 @@ class MobileProductDetailPage extends StatelessWidget {
             // Status & Flags
             _buildSectionTitle('Status & Flags', Icons.flag),
             const SizedBox(height: 8),
-            _buildInfoCard([
-              _buildStatusRow('Production', product.production, Icons.factory),
-              _buildStatusRow('Popular Product', product.popularProduct, Icons.star),
-              _buildInfoRow('Discount', product.discount != null ? '${product.discount}%' : 'None', Icons.local_offer),
-            ]),
+            _buildStatusCard(),
             
             const SizedBox(height: 16),
             
@@ -88,8 +192,8 @@ class MobileProductDetailPage extends StatelessWidget {
             _buildSectionTitle('Timestamps', Icons.access_time),
             const SizedBox(height: 8),
             _buildInfoCard([
-              _buildInfoRow('Created At', _formatDateTime(product.createdAt), Icons.calendar_today),
-              _buildInfoRow('Updated At', _formatDateTime(product.updatedAt), Icons.update),
+              _buildInfoRow('Created At', _formatDateTime(widget.product.createdAt), Icons.calendar_today),
+              _buildInfoRow('Updated At', _formatDateTime(widget.product.updatedAt), Icons.update),
             ]),
             
             const SizedBox(height: 16),
@@ -102,20 +206,291 @@ class MobileProductDetailPage extends StatelessWidget {
             const SizedBox(height: 16),
             
             // Matching Words
-            if (product.matchingWords != null && product.matchingWords!.isNotEmpty) ...[
+            if (widget.product.matchingWords != null && widget.product.matchingWords!.isNotEmpty) ...[
               _buildSectionTitle('Matching Words', Icons.text_fields),
               const SizedBox(height: 8),
               _buildInfoCard([
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
-                    product.matchingWords!,
+                    widget.product.matchingWords!,
                     style: const TextStyle(fontSize: 14),
                   ),
                 ),
               ]),
               const SizedBox(height: 16),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditablePricesJson() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.code, size: 24, color: Colors.blue.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Prices JSON Data',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ),
+                if (!_isEditing)
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = true;
+                      });
+                    },
+                  )
+                else ...[
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.red),
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = false;
+                        _pricesJsonController.text = _formatJson(widget.product.uPrices);
+                        _production = widget.product.production;
+                        _popularProduct = widget.product.popularProduct;
+                      });
+                    },
+                  ),
+                  IconButton(
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save, color: Colors.green),
+                    onPressed: _isSaving ? null : _saveJson,
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _isEditing ? Colors.white : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _isEditing ? Colors.blue.shade300 : Colors.grey.shade300,
+                  width: _isEditing ? 2 : 1,
+                ),
+              ),
+              child: _isEditing
+                  ? TextField(
+                      controller: _pricesJsonController,
+                      maxLines: null,
+                      minLines: 10,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Enter valid JSON array...',
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    )
+                  : SelectableText(
+                      _pricesJsonController.text,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+            ),
+            if (_isEditing) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.yellow.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.yellow.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Make sure your JSON is valid before saving',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            // Production Toggle
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.factory, size: 20, color: Colors.blue.shade600),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Production',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _production,
+                    onChanged: _isEditing ? (value) {
+                      setState(() {
+                        _production = value;
+                      });
+                    } : null,
+                    activeColor: Colors.green,
+                  ),
+                  if (!_isEditing)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _production ? Colors.green.shade100 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _production ? 'Yes' : 'No',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _production ? Colors.green.shade700 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Popular Product Toggle
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.star, size: 20, color: Colors.blue.shade600),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Popular Product',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _popularProduct,
+                    onChanged: _isEditing ? (value) {
+                      setState(() {
+                        _popularProduct = value;
+                      });
+                    } : null,
+                    activeColor: Colors.green,
+                  ),
+                  if (!_isEditing)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _popularProduct ? Colors.green.shade100 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _popularProduct ? 'Yes' : 'No',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _popularProduct ? Colors.green.shade700 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Discount (read-only)
+            Container(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.local_offer, size: 20, color: Colors.blue.shade600),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Discount',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.product.discount != null ? '${widget.product.discount}%' : 'None',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -145,7 +520,7 @@ class MobileProductDetailPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    product.name,
+                    widget.product.name,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -154,7 +529,7 @@ class MobileProductDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'ID: #${product.id}',
+                    'ID: #${widget.product.id}',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.9),
@@ -205,7 +580,7 @@ class MobileProductDetailPage extends StatelessWidget {
                 bottomRight: Radius.circular(12),
               ),
               child: Image.network(
-                product.image!,
+                widget.product.image!,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return const Center(
@@ -362,10 +737,10 @@ class MobileProductDetailPage extends StatelessWidget {
   Widget _buildPricesSection(BuildContext context) {
     List<dynamic> priceList = [];
     try {
-      if (product.uPrices.isEmpty || product.uPrices == 'null') {
+      if (widget.product.uPrices.isEmpty || widget.product.uPrices == 'null') {
         priceList = [];
       } else {
-        priceList = jsonDecode(product.uPrices);
+        priceList = jsonDecode(widget.product.uPrices);
       }
     } catch (e) {
       priceList = [];
@@ -551,17 +926,17 @@ class MobileProductDetailPage extends StatelessWidget {
                   onPressed: () async {
                     await ProductDetailsButtonHandler.handlePriceButtonClick(
                       context: context,
-                      productId: product.id,
-                      productName: product.name,
+                      productId: widget.product.id,
+                      productName: widget.product.name,
                       priceItem: priceItem,
                       priceIndex: index,
                       onStockTypeAdded: () {},
                       onDataFetched: (List<ProductDetails> productDetailsList) {
                         ProductDetailsButtonHandler.showProductDetailsDialog(
                           context: context,
-                          productName: product.name,
+                          productName: widget.product.name,
                           compositeId: ProductDetailsService.generateCompositeId(
-                            product.id,
+                            widget.product.id,
                             priceItemId.toString(),
                           ),
                           productDetailsList: productDetailsList,
