@@ -13,7 +13,7 @@ class MobileProductDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(product.name),
+        title: Text('📱 ${product.name}'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
@@ -23,6 +23,32 @@ class MobileProductDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Page Name Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade300, width: 2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.phone_android, color: Colors.blue.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    '📱 Mobile Product Detail Page',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            
             // Product Header Card
             _buildHeaderCard(),
             const SizedBox(height: 16),

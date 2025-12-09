@@ -72,7 +72,7 @@ class _MobileProductDetailsDialogState extends State<MobileProductDetailsDialog>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Purchase History',
+                          '📱 Mobile Purchase History Dialog',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 12,

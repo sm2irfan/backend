@@ -97,7 +97,7 @@ class _MobileProductViewState extends State<MobileProductView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mobile View - Products'),
+        title: const Text('📱 Mobile Product List'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
@@ -444,7 +444,8 @@ class _MobileProductViewState extends State<MobileProductView> {
               _buildAttributeRow('Production', product.production ? 'Yes' : 'No', Icons.factory, isEven),
               _buildAttributeRow('Discount', product.discount != null ? '${product.discount}%' : 'None', Icons.local_offer, isEven),
               _buildAttributeRow('Popular', product.popularProduct ? 'Yes' : 'No', Icons.star, isEven),
-              _buildAttributeRow('Image URL', product.image ?? 'No image', Icons.image, isEven, isUrl: true),
+              // Removed 'Image URL' attribute row for mobile view
+              _buildPricesJsonDisplay(product, isEven),
               _buildPriceButtonsRow(product, isEven),
             ],
           ),
@@ -754,6 +755,76 @@ class _MobileProductViewState extends State<MobileProductView> {
         ),
       );
     });
+  }
+
+  Widget _buildPricesJsonDisplay(Product product, bool isEven) {
+    final textColor = isEven ? Colors.blue.shade900 : Colors.green.shade900;
+    final iconColor = isEven ? Colors.blue.shade600 : Colors.green.shade600;
+    
+    // Format the JSON for display
+    String formattedJson = 'No prices available';
+    if (product.uPrices.isNotEmpty && product.uPrices != 'null') {
+      try {
+        final decoded = jsonDecode(product.uPrices);
+        const encoder = JsonEncoder.withIndent('  ');
+        formattedJson = encoder.convert(decoded);
+      } catch (e) {
+        formattedJson = product.uPrices;
+      }
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade300,
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.code, size: 16, color: iconColor),
+              const SizedBox(width: 8),
+              Text(
+                'Prices (JSON)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: SelectableText(
+              formattedJson,
+              style: const TextStyle(
+                fontSize: 11,
+                fontFamily: 'monospace',
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAttributeRow(String label, String value, IconData icon, bool isEven, {bool isUrl = false, bool isPrice = false}) {

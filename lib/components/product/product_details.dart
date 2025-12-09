@@ -330,7 +330,7 @@ class StockTypeSelectionDialog extends StatelessWidget {
         children: [
           Icon(Icons.inventory, color: Colors.blue, size: 24),
           SizedBox(width: 8),
-          Text('Choose Stock Type'),
+          Text('📦 Choose Stock Type Dialog'),
         ],
       ),
       content: Column(
@@ -1167,7 +1167,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Product Details - ${widget.productName}'),
+      title: Text('🖥️ Desktop Product Details - ${widget.productName}'),
       content: SizedBox(
         width: double.maxFinite,
         height: 600,
