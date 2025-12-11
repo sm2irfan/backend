@@ -20,6 +20,8 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
   bool _isSaving = false;
   late bool _production;
   late bool _popularProduct;
+  int _nextIdIndex = 0; // Track which element to add ID to next
+  int _nextOldPriceIndex = 0; // Track which element to add old_price to next
 
   @override
   void initState() {
@@ -27,6 +29,8 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
     _pricesJsonController = TextEditingController(text: _formatJson(widget.product.uPrices));
     _production = widget.product.production;
     _popularProduct = widget.product.popularProduct;
+    _nextIdIndex = 0;
+    _nextOldPriceIndex = 0;
   }
 
   @override
@@ -74,21 +78,37 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
         return;
       }
       
-      // Add id to each item if it doesn't already have one
+      // If we've already processed all items, reset to start
+      if (_nextIdIndex >= decoded.length) {
+        _nextIdIndex = 0;
+      }
+      
       List<Map<String, dynamic>> updatedList = [];
       for (int i = 0; i < decoded.length; i++) {
         if (decoded[i] is Map<String, dynamic>) {
           Map<String, dynamic> item = Map<String, dynamic>.from(decoded[i]);
-          // Add id as the first property
-          Map<String, dynamic> newItem = {'id': '${i + 1}'};
+          Map<String, dynamic> newItem = {};
+          
+          // Add id only to the current index
+          if (i == _nextIdIndex) {
+            newItem['id'] = '${i + 1}';
+          } else if (item.containsKey('id')) {
+            // Preserve existing id for other items
+            newItem['id'] = item['id'];
+          }
+          
+          // Add other properties
           item.forEach((key, value) {
             if (key != 'id') {
               newItem[key] = value;
             }
           });
+          
           updatedList.add(newItem);
         }
       }
+      
+      _nextIdIndex++; // Move to next item for next click
       
       // Format and update the text field
       const encoder = JsonEncoder.withIndent('  ');
@@ -98,7 +118,7 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Added ID to ${updatedList.length} item(s)'),
+          content: Text('Added ID to item #${_nextIdIndex}'),
           backgroundColor: Colors.green,
         ),
       );
@@ -129,32 +149,42 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
         return;
       }
       
-      // Add old_price to each item
+      // If we've already processed all items, reset to start
+      if (_nextOldPriceIndex >= decoded.length) {
+        _nextOldPriceIndex = 0;
+      }
+      
       List<Map<String, dynamic>> updatedList = [];
       for (int i = 0; i < decoded.length; i++) {
         if (decoded[i] is Map<String, dynamic>) {
           Map<String, dynamic> item = Map<String, dynamic>.from(decoded[i]);
-          // Preserve id first, then add other fields, then old_price
           Map<String, dynamic> newItem = {};
           
-          // Add id first if it exists
+          // Preserve id if exists
           if (item.containsKey('id')) {
             newItem['id'] = item['id'];
           }
           
-          // Add all other fields except id and old_price
+          // Add other properties except old_price
           item.forEach((key, value) {
             if (key != 'id' && key != 'old_price') {
               newItem[key] = value;
             }
           });
           
-          // Add old_price at the end
-          newItem['old_price'] = item.containsKey('old_price') ? item['old_price'] : '1';
+          // Add old_price only to the current index
+          if (i == _nextOldPriceIndex) {
+            newItem['old_price'] = '1';
+          } else if (item.containsKey('old_price')) {
+            // Preserve existing old_price for other items
+            newItem['old_price'] = item['old_price'];
+          }
           
           updatedList.add(newItem);
         }
       }
+      
+      _nextOldPriceIndex++; // Move to next item for next click
       
       // Format and update the text field
       const encoder = JsonEncoder.withIndent('  ');
@@ -164,7 +194,7 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Added old_price to ${updatedList.length} item(s)'),
+          content: Text('Added old_price to item #${_nextOldPriceIndex}'),
           backgroundColor: Colors.green,
         ),
       );
@@ -421,6 +451,8 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
                         _pricesJsonController.text = _formatJson(widget.product.uPrices);
                         _production = widget.product.production;
                         _popularProduct = widget.product.popularProduct;
+                        _nextIdIndex = 0; // Reset counters when canceling
+                        _nextOldPriceIndex = 0;
                       });
                     },
                   ),
