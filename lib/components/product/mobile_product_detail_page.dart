@@ -57,6 +57,127 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
     }
   }
 
+  void _addIdToAllItems() {
+    final jsonText = _pricesJsonController.text.trim();
+    
+    try {
+      final decoded = jsonDecode(jsonText);
+      
+      // Check if it's a list
+      if (decoded is! List) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('JSON must be an array!'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // Add id to each item if it doesn't already have one
+      List<Map<String, dynamic>> updatedList = [];
+      for (int i = 0; i < decoded.length; i++) {
+        if (decoded[i] is Map<String, dynamic>) {
+          Map<String, dynamic> item = Map<String, dynamic>.from(decoded[i]);
+          // Add id as the first property
+          Map<String, dynamic> newItem = {'id': '${i + 1}'};
+          item.forEach((key, value) {
+            if (key != 'id') {
+              newItem[key] = value;
+            }
+          });
+          updatedList.add(newItem);
+        }
+      }
+      
+      // Format and update the text field
+      const encoder = JsonEncoder.withIndent('  ');
+      setState(() {
+        _pricesJsonController.text = encoder.convert(updatedList);
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ID to ${updatedList.length} item(s)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error adding IDs: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _addOldPriceToAllItems() {
+    final jsonText = _pricesJsonController.text.trim();
+    
+    try {
+      final decoded = jsonDecode(jsonText);
+      
+      // Check if it's a list
+      if (decoded is! List) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('JSON must be an array!'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // Add old_price to each item
+      List<Map<String, dynamic>> updatedList = [];
+      for (int i = 0; i < decoded.length; i++) {
+        if (decoded[i] is Map<String, dynamic>) {
+          Map<String, dynamic> item = Map<String, dynamic>.from(decoded[i]);
+          // Preserve id first, then add other fields, then old_price
+          Map<String, dynamic> newItem = {};
+          
+          // Add id first if it exists
+          if (item.containsKey('id')) {
+            newItem['id'] = item['id'];
+          }
+          
+          // Add all other fields except id and old_price
+          item.forEach((key, value) {
+            if (key != 'id' && key != 'old_price') {
+              newItem[key] = value;
+            }
+          });
+          
+          // Add old_price at the end
+          newItem['old_price'] = item.containsKey('old_price') ? item['old_price'] : '1';
+          
+          updatedList.add(newItem);
+        }
+      }
+      
+      // Format and update the text field
+      const encoder = JsonEncoder.withIndent('  ');
+      setState(() {
+        _pricesJsonController.text = encoder.convert(updatedList);
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added old_price to ${updatedList.length} item(s)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error adding old_price: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _saveJson() async {
     final jsonText = _pricesJsonController.text.trim();
     
@@ -257,10 +378,43 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
                         _isEditing = true;
                       });
                     },
-                  )
-                else ...[
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
+                  ),
+              ],
+            ),
+            if (_isEditing) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.tag, size: 16),
+                    label: const Text('Add ID'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: _addIdToAllItems,
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.history, size: 16),
+                    label: const Text('Add Old Price'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: _addOldPriceToAllItems,
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.close, size: 16),
+                    label: const Text('Cancel'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                     onPressed: () {
                       setState(() {
                         _isEditing = false;
@@ -270,19 +424,25 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
                       });
                     },
                   ),
-                  IconButton(
+                  ElevatedButton.icon(
                     icon: _isSaving
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
-                        : const Icon(Icons.save, color: Colors.green),
+                        : const Icon(Icons.save, size: 16),
+                    label: const Text('Save'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                     onPressed: _isSaving ? null : _saveJson,
                   ),
                 ],
-              ],
-            ),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
