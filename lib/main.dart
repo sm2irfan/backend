@@ -153,12 +153,30 @@ class _AppRootState extends State<AppRoot> {
         );
       }
 
-      // Determine if running on mobile platform
+      // Always use mobile view when running on Android/iOS (not web)
       final bool isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
       
       print(
         '[BUILD] Showing main app - Platform: ${isMobile ? "Mobile" : "Desktop"}, isAuthenticated: $_isAuthenticated',
       );
+      
+      // Default home widget for mobile
+      Widget defaultHome;
+      if (_isAuthenticated) {
+        if (isMobile) {
+          defaultHome = BlocProvider(
+            create: (context) => ProductBloc(
+              ProductRepository(),
+            )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+            child: const MobileProductView(),
+          );
+        } else {
+          defaultHome = const ProductDashboard();
+        }
+      } else {
+        defaultHome = const LoginPage();
+      }
+      
       return MaterialApp(
         title: 'Product Management App',
         theme: ThemeData(
@@ -173,16 +191,7 @@ class _AppRootState extends State<AppRoot> {
         ),
         debugShowCheckedModeBanner: false,
         // Use home instead of initialRoute to avoid route initialization issues
-        home: _isAuthenticated
-            ? (isMobile
-                ? BlocProvider(
-                    create: (context) => ProductBloc(
-                      ProductRepository(),
-                    )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
-                    child: const MobileProductView(),
-                  )
-                : const ProductDashboard())
-            : const LoginPage(),
+        home: defaultHome,
         routes: {
           AppRoutes.products: (context) => const ProductDashboard(),
           AppRoutes.imageUpload: (context) => const ImageUploadPage(),
@@ -200,6 +209,17 @@ class _AppRootState extends State<AppRoot> {
             switch (settings.name) {
               case AppRoutes.products:
               case AppRoutes.home:
+                // For mobile platforms, route to mobile view
+                if (isMobile) {
+                  return MaterialPageRoute(
+                    builder: (_) => BlocProvider(
+                      create: (context) => ProductBloc(
+                        ProductRepository(),
+                      )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                      child: const MobileProductView(),
+                    ),
+                  );
+                }
                 return MaterialPageRoute(
                   builder: (_) => const ProductDashboard(),
                 );
@@ -227,6 +247,17 @@ class _AppRootState extends State<AppRoot> {
                 if (!_isAuthenticated) {
                   return MaterialPageRoute(builder: (_) => const LoginPage());
                 }
+                // For mobile, default to mobile view
+                if (isMobile) {
+                  return MaterialPageRoute(
+                    builder: (_) => BlocProvider(
+                      create: (context) => ProductBloc(
+                        ProductRepository(),
+                      )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                      child: const MobileProductView(),
+                    ),
+                  );
+                }
                 return MaterialPageRoute(
                   builder: (_) => const ProductDashboard(),
                 );
@@ -241,6 +272,17 @@ class _AppRootState extends State<AppRoot> {
           try {
             if (!_isAuthenticated) {
               return MaterialPageRoute(builder: (_) => const LoginPage());
+            }
+            // For mobile, route to mobile view
+            if (isMobile) {
+              return MaterialPageRoute(
+                builder: (_) => BlocProvider(
+                  create: (context) => ProductBloc(
+                    ProductRepository(),
+                  )..add(LoadPaginatedProducts(page: 1, pageSize: 20)),
+                  child: const MobileProductView(),
+                ),
+              );
             }
             return MaterialPageRoute(builder: (_) => const ProductDashboard());
           } catch (e) {
