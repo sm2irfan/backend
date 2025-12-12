@@ -20,9 +20,12 @@ class _MobileProductViewState extends State<MobileProductView> {
   final int _pageSize = 20;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _idSearchController = TextEditingController();
   String _searchQuery = '';
+  String _idSearchQuery = '';
   String? _selectedCategory;
   List<String> _categories = ['All'];
+  bool _showFilters = false; // Track filter visibility
 
   @override
   void initState() {
@@ -59,6 +62,17 @@ class _MobileProductViewState extends State<MobileProductView> {
     final query = _searchController.text.trim();
     setState(() {
       _searchQuery = query;
+      _idSearchQuery = ''; // Clear ID search when performing name search
+      _currentPage = 1;
+    });
+    _loadProducts();
+  }
+
+  void _performIdSearch() {
+    final query = _idSearchController.text.trim();
+    setState(() {
+      _idSearchQuery = query;
+      _searchQuery = ''; // Clear name search when performing ID search
       _currentPage = 1;
     });
     _loadProducts();
@@ -67,8 +81,19 @@ class _MobileProductViewState extends State<MobileProductView> {
   void _loadProducts() {
     final productBloc = BlocProvider.of<ProductBloc>(context);
     
-    // Priority: category filter > search query > all products
-    if (_selectedCategory != null && _selectedCategory != 'All') {
+    // Priority: ID search > category filter > name search > all products
+    if (_idSearchQuery.isNotEmpty) {
+      // Filter by ID only
+      productBloc.add(
+        FilterProductsByColumn(
+          column: 'id',
+          value: _idSearchQuery,
+          page: _currentPage,
+          pageSize: _pageSize,
+          filterType: 'equals',
+        ),
+      );
+    } else if (_selectedCategory != null && _selectedCategory != 'All') {
       // Filter by category only
       productBloc.add(
         FilterProductsByColumn(
@@ -131,6 +156,7 @@ class _MobileProductViewState extends State<MobileProductView> {
   void dispose() {
     _scrollController.dispose();
     _searchController.dispose();
+    _idSearchController.dispose();
     super.dispose();
   }
 
@@ -145,139 +171,225 @@ class _MobileProductViewState extends State<MobileProductView> {
       ),
       body: Column(
         children: [
-          // Search Field and Sync Button
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
+          // Toggle button to show/hide filters
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Colors.blue.shade50,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search products by name...',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      _searchQuery = '';
-                                      _currentPage = 1;
-                                    });
-                                    _loadProducts();
-                                  },
-                                )
-                              : null,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                        onSubmitted: (_) => _performSearch(),
-                      ),
+                Expanded(
+                  child: Text(
+                    _showFilters ? 'Hide Filters & Search' : 'Show Filters & Search',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.blue.shade700,
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _performSearch,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 16,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text('Search'),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                // Category Filter and Sync Button in one row
-                Row(
-                  children: [
-                    // Category Filter Dropdown (left side)
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.category, color: Colors.blue.shade700, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: DropdownButton<String>(
-                                value: _selectedCategory ?? 'All',
-                                isExpanded: true,
-                                underline: const SizedBox(),
-                                hint: const Text('Filter by Category'),
-                                items: _categories.map((String category) {
-                                  return DropdownMenuItem<String>(
-                                    value: category,
-                                    child: Text(
-                                      category,
-                                      style: TextStyle(
-                                        fontWeight: category == 'All' ? FontWeight.bold : FontWeight.normal,
-                                        color: category == 'All' ? Colors.blue.shade700 : Colors.black87,
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (String? newValue) {
-                                  setState(() {
-                                    _selectedCategory = newValue == 'All' ? null : newValue;
-                                    _currentPage = 1;
-                                  });
-                                  _loadProducts();
-                                },
-                              ),
-                            ),
-                            if (_selectedCategory != null && _selectedCategory != 'All')
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 20),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedCategory = null;
-                                    _currentPage = 1;
-                                  });
-                                  _loadProducts();
-                                },
-                                tooltip: 'Clear filter',
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Sync Button (right side)
-                    SyncProductsButton(
-                      onSyncCompleted: () {
-                        setState(() {
-                          _currentPage = 1;
-                        });
-                        _loadCategories();
-                        _loadProducts();
-                      },
-                    ),
-                  ],
+                IconButton(
+                  icon: Icon(
+                    _showFilters ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.blue.shade700,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _showFilters = !_showFilters;
+                    });
+                  },
+                  tooltip: _showFilters ? 'Hide filters' : 'Show filters',
                 ),
               ],
             ),
           ),
+          // Search Field, Category Filter, and Sync Button (collapsible)
+          if (_showFilters)
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                children: [
+                  // Name Search Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search products by name...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {
+                                        _searchQuery = '';
+                                        _currentPage = 1;
+                                      });
+                                      _loadProducts();
+                                    },
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          onSubmitted: (_) => _performSearch(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _performSearch,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Search'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // ID Search Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _idSearchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search by Product ID...',
+                            prefixIcon: const Icon(Icons.tag),
+                            suffixIcon: _idSearchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _idSearchController.clear();
+                                      setState(() {
+                                        _idSearchQuery = '';
+                                        _currentPage = 1;
+                                      });
+                                      _loadProducts();
+                                    },
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onSubmitted: (_) => _performIdSearch(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _performIdSearch,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Search'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Category Filter and Sync Button in one row
+                  Row(
+                    children: [
+                      // Category Filter Dropdown (left side)
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.category, color: Colors.blue.shade700, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButton<String>(
+                                  value: _selectedCategory ?? 'All',
+                                  isExpanded: true,
+                                  underline: const SizedBox(),
+                                  hint: const Text('Filter by Category'),
+                                  items: _categories.map((String category) {
+                                    return DropdownMenuItem<String>(
+                                      value: category,
+                                      child: Text(
+                                        category,
+                                        style: TextStyle(
+                                          fontWeight: category == 'All' ? FontWeight.bold : FontWeight.normal,
+                                          color: category == 'All' ? Colors.blue.shade700 : Colors.black87,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (String? newValue) {
+                                    setState(() {
+                                      _selectedCategory = newValue == 'All' ? null : newValue;
+                                      _currentPage = 1;
+                                    });
+                                    _loadProducts();
+                                  },
+                                ),
+                              ),
+                              if (_selectedCategory != null && _selectedCategory != 'All')
+                                IconButton(
+                                  icon: const Icon(Icons.clear, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedCategory = null;
+                                      _currentPage = 1;
+                                    });
+                                    _loadProducts();
+                                  },
+                                  tooltip: 'Clear filter',
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Sync Button (right side)
+                      SyncProductsButton(
+                        onSyncCompleted: () {
+                          setState(() {
+                            _currentPage = 1;
+                          });
+                          _loadCategories();
+                          _loadProducts();
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           // Products content
           Expanded(
             child: BlocBuilder<ProductBloc, ProductState>(
