@@ -228,6 +228,66 @@ class ProductDetailsService {
     }
   }
 
+  /// Fetch all unique supplier names from products_details table
+  static Future<List<String>> fetchAllSuppliers() async {
+    try {
+      final response = await _supabase.from(_tableName).select('supplier');
+
+      if (response.isEmpty) {
+        return [];
+      }
+
+      final Set<String> uniqueSuppliers = {};
+      for (var item in response) {
+        final supplier = item['supplier']?.toString();
+        if (supplier != null && supplier.isNotEmpty) {
+          uniqueSuppliers.add(supplier);
+        }
+      }
+
+      return uniqueSuppliers.toList();
+    } catch (error) {
+      print('Error fetching unique suppliers: $error');
+      return [];
+    }
+  }
+
+  /// Fetch product's uprices JSON from pre_all_products table
+  static Future<String> fetchProductPrices(int productId) async {
+    try {
+      final response = await _supabase
+          .from('pre_all_products')
+          .select('uprices')
+          .eq('id', productId)
+          .single();
+
+      return response['uprices'] as String? ?? '';
+    } catch (error) {
+      print('Error fetching product prices: $error');
+      return '';
+    }
+  }
+
+  /// Extract unit value from uprices JSON for a specific uPriceId
+  static String extractUnitFromPrices(String uPricesJson, String uPriceId) {
+    if (uPricesJson.isEmpty || uPricesJson == 'null') {
+      return '';
+    }
+
+    try {
+      final List<dynamic> priceList = jsonDecode(uPricesJson);
+      for (var priceItem in priceList) {
+        if (priceItem['id']?.toString() == uPriceId) {
+          return priceItem['unit']?.toString() ?? '';
+        }
+      }
+    } catch (e) {
+      print('Error parsing uprices JSON: $e');
+    }
+
+    return '';
+  }
+
   /// Add stock type attribute to a specific uPrice element
   static Future<void> addStockTypeToProduct(
     int productId,
@@ -665,6 +725,11 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
   final _supplierController = TextEditingController();
   final _expireDateController = TextEditingController();
 
+  // Supplier dropdown state
+  List<String> _supplierList = [];
+  String? _selectedSupplier;
+  bool _isAddingNewSupplier = false;
+
   // Controllers for editing existing rows
   Map<int, Map<String, TextEditingController>> _editControllers = {};
 
@@ -674,6 +739,31 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
     _productDetailsList = List.from(widget.productDetailsList);
     // Sort by created_at to ensure ascending order
     _productDetailsList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    _loadUniqueSuppliers();
+  }
+
+  /// Load unique supplier names from database
+  Future<void> _loadUniqueSuppliers() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('products_details')
+          .select('supplier');
+
+      if (response.isNotEmpty) {
+        final Set<String> uniqueSuppliers = {};
+        for (var item in response) {
+          final supplier = item['supplier']?.toString();
+          if (supplier != null && supplier.isNotEmpty) {
+            uniqueSuppliers.add(supplier);
+          }
+        }
+        setState(() {
+          _supplierList = uniqueSuppliers.toList()..sort();
+        });
+      }
+    } catch (e) {
+      print('Error loading unique suppliers: $e');
+    }
   }
 
   @override
@@ -809,15 +899,61 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
     }
   }
 
-  void _addNewRow() {
-    setState(() {
-      _newRowIndex = _productDetailsList.length;
-      _quantityController.clear();
-      _unitController.clear();
-      _priceController.clear();
-      _supplierController.clear();
-      _expireDateController.clear();
-    });
+  void _addNewRow() async {
+    try {
+      // Parse composite ID to get product ID and uPrice ID
+      final compositeIdParts = ProductDetailsService.parseCompositeId(
+        widget.compositeId,
+      );
+      final productId = compositeIdParts['productId'];
+      final uPriceId = compositeIdParts['uPriceId'];
+
+      // Fetch product's price JSON to get the unit
+      final response = await Supabase.instance.client
+          .from('pre_all_products')
+          .select('uprices')
+          .eq('id', productId)
+          .single();
+
+      String unitValue = '';
+      final currentUPrices = response['uprices'] as String?;
+      if (currentUPrices != null &&
+          currentUPrices.isNotEmpty &&
+          currentUPrices != 'null') {
+        final List<dynamic> priceList = jsonDecode(currentUPrices);
+        // Find the price item with matching ID
+        for (var priceItem in priceList) {
+          if (priceItem['id']?.toString() == uPriceId) {
+            unitValue = priceItem['unit']?.toString() ?? '';
+            break;
+          }
+        }
+      }
+
+      setState(() {
+        _newRowIndex = _productDetailsList.length;
+        _quantityController.clear();
+        _unitController.text = unitValue; // Pre-populate unit
+        _priceController.clear();
+        _supplierController.clear();
+        _selectedSupplier = null;
+        _isAddingNewSupplier = false;
+        _expireDateController.clear();
+      });
+    } catch (e) {
+      print('Error fetching unit from price JSON: $e');
+      // Fallback: open form with empty unit
+      setState(() {
+        _newRowIndex = _productDetailsList.length;
+        _quantityController.clear();
+        _unitController.clear();
+        _priceController.clear();
+        _supplierController.clear();
+        _selectedSupplier = null;
+        _isAddingNewSupplier = false;
+        _expireDateController.clear();
+      });
+    }
   }
 
   void _cancelNewRow() {
@@ -847,6 +983,11 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
           print('Continuing with product detail creation...');
         }
 
+        // Get supplier value from dropdown or text input
+        final supplierValue = _isAddingNewSupplier 
+            ? _supplierController.text 
+            : (_selectedSupplier ?? '');
+
         final newDetail = ProductDetails(
           id: 0, // Will be auto-generated by database
           identityId: widget.compositeId,
@@ -854,7 +995,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
           quantity: newQuantity,
           unit: _unitController.text,
           price: double.tryParse(_priceController.text) ?? 0.0,
-          supplier: _supplierController.text,
+          supplier: supplierValue,
           expireDate: DateTime.parse(_expireDateController.text),
         );
 
@@ -1561,11 +1702,14 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                               padding: const EdgeInsets.all(4.0),
                               child: TextField(
                                 controller: _unitController,
+                                enabled: false, // Make read-only
                                 style: const TextStyle(fontSize: 13),
                                 decoration: const InputDecoration(
                                   border: OutlineInputBorder(),
                                   isDense: true,
-                                  hintText: 'Unit',
+                                  hintText: 'Unit (auto-filled)',
+                                  filled: true,
+                                  fillColor: Color(0xFFF5F5F5), // Light gray background
                                 ),
                               ),
                             ),
@@ -1587,14 +1731,86 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                           TableCell(
                             child: Padding(
                               padding: const EdgeInsets.all(4.0),
-                              child: TextField(
-                                controller: _supplierController,
-                                style: const TextStyle(fontSize: 13),
-                                decoration: const InputDecoration(
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  hintText: 'Supplier',
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!_isAddingNewSupplier) ...[
+                                    DropdownButtonFormField<String>(
+                                      value: _selectedSupplier,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                        hintText: 'Select Supplier',
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      ),
+                                      style: const TextStyle(fontSize: 13, color: Colors.black),
+                                      items: _supplierList.map((String supplier) {
+                                        return DropdownMenuItem<String>(
+                                          value: supplier,
+                                          child: Text(
+                                            supplier,
+                                            style: const TextStyle(fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (String? newValue) {
+                                        setState(() {
+                                          _selectedSupplier = newValue;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(height: 4),
+                                    SizedBox(
+                                      height: 28,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          setState(() {
+                                            _isAddingNewSupplier = true;
+                                            _supplierController.clear();
+                                          });
+                                        },
+                                        icon: const Icon(Icons.add, size: 14),
+                                        label: const Text('New', style: TextStyle(fontSize: 11)),
+                                        style: ElevatedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (_isAddingNewSupplier) ...[
+                                    TextField(
+                                      controller: _supplierController,
+                                      style: const TextStyle(fontSize: 13),
+                                      decoration: const InputDecoration(
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                        hintText: 'New Supplier Name',
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    SizedBox(
+                                      height: 28,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          setState(() {
+                                            _isAddingNewSupplier = false;
+                                            _supplierController.clear();
+                                          });
+                                        },
+                                        icon: const Icon(Icons.close, size: 14),
+                                        label: const Text('Cancel', style: TextStyle(fontSize: 11)),
+                                        style: ElevatedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          backgroundColor: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ),

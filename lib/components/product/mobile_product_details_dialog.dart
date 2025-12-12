@@ -446,6 +446,11 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
   late TextEditingController _expireDateController;
   bool _isSaving = false;
 
+  // Supplier dropdown state
+  List<String> _supplierList = [];
+  String? _selectedSupplier;
+  bool _isAddingNewSupplier = false;
+
   @override
   void initState() {
     super.initState();
@@ -466,6 +471,47 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
         ? DateFormat('yyyy-MM-dd').format(widget.detail!.expireDate)
         : DateFormat('yyyy-MM-dd').format(DateTime.now().add(const Duration(days: 365))),
     );
+
+    // Load unique suppliers and auto-fill unit for new records
+    _loadUniqueSuppliers();
+    if (widget.detail == null) {
+      _loadUnitFromPriceJson();
+    } else {
+      // For editing, set the selected supplier if it exists
+      _selectedSupplier = widget.detail?.supplier;
+    }
+  }
+
+  /// Load unique supplier names from database
+  Future<void> _loadUniqueSuppliers() async {
+    try {
+      final response = await ProductDetailsService.fetchAllSuppliers();
+      setState(() {
+        _supplierList = response..sort();
+      });
+    } catch (e) {
+      print('Error loading unique suppliers: $e');
+    }
+  }
+
+  /// Load unit from product's price JSON for new records
+  Future<void> _loadUnitFromPriceJson() async {
+    try {
+      final compositeIdParts = ProductDetailsService.parseCompositeId(
+        widget.compositeId,
+      );
+      final productId = compositeIdParts['productId'];
+      final uPriceId = compositeIdParts['uPriceId'];
+
+      final response = await ProductDetailsService.fetchProductPrices(productId);
+      final unitValue = ProductDetailsService.extractUnitFromPrices(response, uPriceId);
+
+      setState(() {
+        _unitController.text = unitValue;
+      });
+    } catch (e) {
+      print('Error loading unit from price JSON: $e');
+    }
   }
 
   @override
@@ -484,6 +530,21 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
     setState(() => _isSaving = true);
 
     try {
+      // Get supplier value from dropdown or text input
+      final supplierValue = _isAddingNewSupplier 
+          ? _supplierController.text 
+          : (_selectedSupplier ?? _supplierController.text);
+
+      if (supplierValue.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select or enter a supplier'), backgroundColor: Colors.red),
+          );
+        }
+        setState(() => _isSaving = false);
+        return;
+      }
+
       // Parse the date from the text field
       final DateTime expireDate;
       try {
@@ -592,10 +653,14 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _unitController,
-                    decoration: const InputDecoration(
+                    enabled: widget.detail != null, // Read-only for new records, editable when editing
+                    decoration: InputDecoration(
                       labelText: 'Unit',
-                      prefixIcon: Icon(Icons.scale),
-                      border: OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.scale),
+                      border: const OutlineInputBorder(),
+                      filled: widget.detail == null,
+                      fillColor: widget.detail == null ? const Color(0xFFF5F5F5) : null,
+                      hintText: widget.detail == null ? 'Auto-filled from price' : null,
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) return 'Required';
@@ -618,18 +683,84 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
                     },
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _supplierController,
-                    decoration: const InputDecoration(
-                      labelText: 'Supplier',
-                      prefixIcon: Icon(Icons.business),
-                      border: OutlineInputBorder(),
+                  if (!_isAddingNewSupplier)
+                    DropdownButtonFormField<String>(
+                      value: _selectedSupplier,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Supplier',
+                        prefixIcon: Icon(Icons.business),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _supplierList.map((String supplier) {
+                        return DropdownMenuItem<String>(
+                          value: supplier,
+                          child: Text(supplier, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedSupplier = newValue;
+                        });
+                      },
+                      validator: (value) {
+                        if (!_isAddingNewSupplier && (value == null || value.isEmpty)) {
+                          return 'Please select a supplier';
+                        }
+                        return null;
+                      },
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'Required';
-                      return null;
-                    },
-                  ),
+                  if (!_isAddingNewSupplier)
+                    const SizedBox(height: 12),
+                  if (!_isAddingNewSupplier)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isAddingNewSupplier = true;
+                            _supplierController.clear();
+                          });
+                        },
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add New Supplier'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                        ),
+                      ),
+                    ),
+                  if (_isAddingNewSupplier)
+                    TextFormField(
+                      controller: _supplierController,
+                      decoration: const InputDecoration(
+                        labelText: 'New Supplier Name',
+                        prefixIcon: Icon(Icons.business),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (_isAddingNewSupplier && (value == null || value.isEmpty)) {
+                          return 'Required';
+                        }
+                        return null;
+                      },
+                    ),
+                  if (_isAddingNewSupplier)
+                    const SizedBox(height: 12),
+                  if (_isAddingNewSupplier)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isAddingNewSupplier = false;
+                            _supplierController.clear();
+                          });
+                        },
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Cancel - Use Existing'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _expireDateController,
