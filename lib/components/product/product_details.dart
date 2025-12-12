@@ -1036,10 +1036,15 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
   }
 
   bool _validateNewRowInputs() {
+    // Get supplier value from dropdown or text input
+    final supplierValue = _isAddingNewSupplier 
+        ? _supplierController.text 
+        : (_selectedSupplier ?? '');
+
     if (_quantityController.text.isEmpty ||
         _unitController.text.isEmpty ||
         _priceController.text.isEmpty ||
-        _supplierController.text.isEmpty ||
+        supplierValue.isEmpty ||
         _expireDateController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -1307,12 +1312,11 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('🖥️ Desktop Product Details - ${widget.productName}'),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: 600,
-        child: Column(
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: DraggableDialog(
+        title: '🖥️ Desktop Product Details - ${widget.productName}',
+        content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SelectableText(
@@ -1868,13 +1872,114 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Close'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          child: const Text('Close'),
+    );
+  }
+}
+
+/// Draggable Dialog Widget for Desktop
+class DraggableDialog extends StatefulWidget {
+  final String title;
+  final Widget content;
+  final List<Widget> actions;
+
+  const DraggableDialog({
+    Key? key,
+    required this.title,
+    required this.content,
+    required this.actions,
+  }) : super(key: key);
+
+  @override
+  State<DraggableDialog> createState() => _DraggableDialogState();
+}
+
+class _DraggableDialogState extends State<DraggableDialog> {
+  Offset _offset = Offset.zero;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: _offset.dx,
+          top: _offset.dy,
+          child: Material(
+            elevation: 24,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.9,
+                maxHeight: MediaQuery.of(context).size.height * 0.9,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Draggable title bar
+                  GestureDetector(
+                    onPanUpdate: (details) {
+                      setState(() {
+                        _offset += details.delta;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade700,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(4),
+                          topRight: Radius.circular(4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.drag_indicator, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.title,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Content
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: widget.content,
+                    ),
+                  ),
+                  // Actions
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: widget.actions,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
