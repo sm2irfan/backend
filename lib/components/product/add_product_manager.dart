@@ -53,7 +53,7 @@ class AddProductManager {
       // Initialize form with empty values
       isAddingNewProduct = true;
       editManager.nameController.text = '';
-      editManager.priceController.text = '';
+      editManager.priceController.text = '[{"id":"1","price":"100","unit":"Kg"}]'; // Initial template
       editManager.descriptionController.text = '';
       editManager.discountController.text = '';
       editManager.category1Controller.text = '';

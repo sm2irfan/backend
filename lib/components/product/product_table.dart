@@ -2087,7 +2087,12 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
 
       // Populate the form with copied product data
       _editManager.nameController.text = '${product.name} (Copy)';
-      _editManager.priceController.text = product.uPrices.toString();
+      // If uPrices is empty or null, provide initial template
+      if (product.uPrices.isEmpty || product.uPrices == 'null' || product.uPrices == '[]') {
+        _editManager.priceController.text = '[{"id":"1","price":"100","unit":"Kg"}]';
+      } else {
+        _editManager.priceController.text = product.uPrices.toString();
+      }
       _editManager.descriptionController.text = product.description ?? '';
       _editManager.discountController.text = product.discount?.toString() ?? '';
       _editManager.category1Controller.text = product.category1 ?? '';

@@ -26,7 +26,12 @@ class EditableProductManager {
   void startEditing(Product product) {
     editingProduct = product;
     nameController.text = product.name;
-    priceController.text = product.uPrices.toString();
+    // If uPrices is empty or null, provide initial template
+    if (product.uPrices.isEmpty || product.uPrices == 'null' || product.uPrices == '[]') {
+      priceController.text = '[{"id":"1","price":"100","unit":"Kg"}]';
+    } else {
+      priceController.text = product.uPrices.toString();
+    }
     descriptionController.text = product.description ?? '';
     discountController.text = product.discount?.toString() ?? '';
     category1Controller.text = product.category1 ?? '';
@@ -125,7 +130,6 @@ class EditableProductManager {
                 contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
-                hintText: '[{"id":"1","price":"100","unit":"Kg"}]',
               ),
               keyboardType: TextInputType.multiline,
               maxLines: null,
