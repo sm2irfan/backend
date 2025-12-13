@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'product_details.dart';
 
 /// Mobile-optimized product details dialog with vertical card layout
@@ -96,6 +98,23 @@ class _MobileProductDetailsDialogState extends State<MobileProductDetailsDialog>
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
+        final deletedQuantity = detail.quantity;
+
+        // Parse composite ID to get product ID and price item ID
+        final compositeIdParts = ProductDetailsService.parseCompositeId(
+          widget.compositeId,
+        );
+        final productId = compositeIdParts['productId'];
+        final uPriceId = compositeIdParts['uPriceId'];
+
+        // Try to update stock by reducing the deleted quantity
+        try {
+          await _updateProductStock(productId, uPriceId, -deletedQuantity);
+        } catch (e) {
+          print('Warning: Could not update stock in all_products table: $e');
+          print('Continuing with product detail deletion...');
+        }
+
         await ProductDetailsService.deleteProductDetail(detail.id);
         await _refreshData();
         if (mounted) {
@@ -112,6 +131,94 @@ class _MobileProductDetailsDialogState extends State<MobileProductDetailsDialog>
       } finally {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Update the stock attribute in the product's uPrices JSON
+  Future<void> _updateProductStock(
+    int productId,
+    String uPriceId,
+    int quantityToAdd,
+  ) async {
+    try {
+      print(
+        'Attempting to update stock for product $productId, uPrice $uPriceId, quantity change: $quantityToAdd',
+      );
+
+      // Get current product data
+      final response = await ProductDetailsService.fetchProductPrices(productId);
+
+      if (response.isEmpty || response == 'null') {
+        print('Product $productId has no valid uprices data');
+        return;
+      }
+
+      // Parse the current uPrices JSON
+      final List<dynamic> priceList = jsonDecode(response);
+
+      // Find the specific price item and update its stock
+      bool found = false;
+      for (var priceItem in priceList) {
+        if (priceItem['id']?.toString() == uPriceId) {
+          // Determine which stock type to update based on existing attributes
+          if (priceItem.containsKey('global_stock')) {
+            // Update global stock
+            final currentStock =
+                priceItem['global_stock'] != null
+                    ? int.tryParse(priceItem['global_stock'].toString()) ?? 0
+                    : 0;
+            priceItem['global_stock'] =
+                (currentStock + quantityToAdd).toString();
+            print(
+              'Updated global_stock for product $productId, uPrice $uPriceId: ${priceItem['global_stock']}',
+            );
+          } else if (priceItem.containsKey('sole_stock')) {
+            // Update sole stock
+            final currentStock =
+                priceItem['sole_stock'] != null
+                    ? int.tryParse(priceItem['sole_stock'].toString()) ?? 0
+                    : 0;
+            priceItem['sole_stock'] = (currentStock + quantityToAdd).toString();
+            print(
+              'Updated sole_stock for product $productId, uPrice $uPriceId: ${priceItem['sole_stock']}',
+            );
+          } else {
+            // Legacy support: if neither stock type is defined, use 'stock' attribute
+            final currentStock =
+                priceItem['stock'] != null
+                    ? int.tryParse(priceItem['stock'].toString()) ?? 0
+                    : 0;
+            priceItem['stock'] = (currentStock + quantityToAdd).toString();
+            print(
+              'Updated legacy stock for product $productId, uPrice $uPriceId: ${priceItem['stock']}',
+            );
+          }
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        throw Exception(
+          'Price item with ID $uPriceId not found in product $productId',
+        );
+      }
+
+      // Convert back to JSON string and update database
+      final updatedUPrices = jsonEncode(priceList);
+      await Supabase.instance.client
+          .from('pre_all_products')
+          .update({'uprices': updatedUPrices})
+          .eq('id', productId);
+
+      print(
+        'Successfully updated stock for product $productId, price item $uPriceId',
+      );
+    } catch (e) {
+      print(
+        'Error updating product stock for product $productId, uPrice $uPriceId: $e',
+      );
+      throw Exception('Failed to update product stock: $e');
     }
   }
 
@@ -559,13 +666,34 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
         return;
       }
 
+      final newQuantity = int.parse(_quantityController.text);
+      final oldQuantity = widget.detail?.quantity ?? 0;
+      final quantityDifference = newQuantity - oldQuantity;
+
+      // Parse composite ID to get product ID and price item ID
+      final compositeIdParts = ProductDetailsService.parseCompositeId(
+        widget.compositeId,
+      );
+      final productId = compositeIdParts['productId'];
+      final uPriceId = compositeIdParts['uPriceId'];
+
+      // Try to update stock in product's uPrices before saving product details
+      if (quantityDifference != 0) {
+        try {
+          await _updateProductStock(productId, uPriceId, quantityDifference);
+        } catch (e) {
+          print('Warning: Could not update stock in all_products table: $e');
+          print('Continuing with product detail save...');
+        }
+      }
+
       final productDetail = ProductDetails(
         id: widget.detail?.id ?? 0,
         identityId: widget.compositeId,
-        quantity: int.parse(_quantityController.text),
+        quantity: newQuantity,
         unit: _unitController.text,
         price: double.parse(_priceController.text),
-        supplier: _supplierController.text,
+        supplier: supplierValue,
         expireDate: expireDate,
         createdAt: widget.detail?.createdAt ?? DateTime.now(),
       );
@@ -598,6 +726,94 @@ class _AddEditProductDetailDialogState extends State<_AddEditProductDetailDialog
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  /// Update the stock attribute in the product's uPrices JSON
+  Future<void> _updateProductStock(
+    int productId,
+    String uPriceId,
+    int quantityToAdd,
+  ) async {
+    try {
+      print(
+        'Attempting to update stock for product $productId, uPrice $uPriceId, quantity change: $quantityToAdd',
+      );
+
+      // Get current product data
+      final response = await ProductDetailsService.fetchProductPrices(productId);
+
+      if (response.isEmpty || response == 'null') {
+        print('Product $productId has no valid uprices data');
+        return;
+      }
+
+      // Parse the current uPrices JSON
+      final List<dynamic> priceList = jsonDecode(response);
+
+      // Find the specific price item and update its stock
+      bool found = false;
+      for (var priceItem in priceList) {
+        if (priceItem['id']?.toString() == uPriceId) {
+          // Determine which stock type to update based on existing attributes
+          if (priceItem.containsKey('global_stock')) {
+            // Update global stock
+            final currentStock =
+                priceItem['global_stock'] != null
+                    ? int.tryParse(priceItem['global_stock'].toString()) ?? 0
+                    : 0;
+            priceItem['global_stock'] =
+                (currentStock + quantityToAdd).toString();
+            print(
+              'Updated global_stock for product $productId, uPrice $uPriceId: ${priceItem['global_stock']}',
+            );
+          } else if (priceItem.containsKey('sole_stock')) {
+            // Update sole stock
+            final currentStock =
+                priceItem['sole_stock'] != null
+                    ? int.tryParse(priceItem['sole_stock'].toString()) ?? 0
+                    : 0;
+            priceItem['sole_stock'] = (currentStock + quantityToAdd).toString();
+            print(
+              'Updated sole_stock for product $productId, uPrice $uPriceId: ${priceItem['sole_stock']}',
+            );
+          } else {
+            // Legacy support: if neither stock type is defined, use 'stock' attribute
+            final currentStock =
+                priceItem['stock'] != null
+                    ? int.tryParse(priceItem['stock'].toString()) ?? 0
+                    : 0;
+            priceItem['stock'] = (currentStock + quantityToAdd).toString();
+            print(
+              'Updated legacy stock for product $productId, uPrice $uPriceId: ${priceItem['stock']}',
+            );
+          }
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        throw Exception(
+          'Price item with ID $uPriceId not found in product $productId',
+        );
+      }
+
+      // Convert back to JSON string and update database
+      final updatedUPrices = jsonEncode(priceList);
+      await Supabase.instance.client
+          .from('pre_all_products')
+          .update({'uprices': updatedUPrices})
+          .eq('id', productId);
+
+      print(
+        'Successfully updated stock for product $productId, price item $uPriceId',
+      );
+    } catch (e) {
+      print(
+        'Error updating product stock for product $productId, uPrice $uPriceId: $e',
+      );
+      throw Exception('Failed to update product stock: $e');
     }
   }
 

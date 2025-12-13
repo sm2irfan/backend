@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../common/app_drawer.dart';
 import 'product.dart';
 import 'sync_products_button.dart';
 import 'product_details.dart';
@@ -168,6 +169,12 @@ class _MobileProductViewState extends State<MobileProductView> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
+      ),
+      drawer: AppDrawer(
+        currentPage: 'products',
+        onPageSelected: (page) {
+          Navigator.of(context).pushReplacementNamed('/$page');
+        },
       ),
       body: Column(
         children: [
