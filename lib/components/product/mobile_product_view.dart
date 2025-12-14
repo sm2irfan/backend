@@ -27,6 +27,12 @@ class _MobileProductViewState extends State<MobileProductView> {
   String? _selectedCategory;
   List<String> _categories = ['All'];
   bool _showFilters = false; // Track filter visibility
+  String? _selectedStockType; // 'sole_stock' or 'global_stock'
+  String? _selectedStockValue; // '0', '1', '2', etc.
+  String? _activeStockType; // Applied filter
+  String? _activeStockValue; // Applied filter
+  bool? _selectedProduction; // true or false
+  bool? _activeProduction; // Applied filter
 
   @override
   void initState() {
@@ -65,6 +71,13 @@ class _MobileProductViewState extends State<MobileProductView> {
       _searchQuery = query;
       _idSearchQuery = ''; // Clear ID search when performing name search
       _currentPage = 1;
+      // Clear stock and production filters when performing other searches
+      _activeStockType = null;
+      _activeStockValue = null;
+      _selectedStockType = null;
+      _selectedStockValue = null;
+      _activeProduction = null;
+      _selectedProduction = null;
     });
     _loadProducts();
   }
@@ -75,12 +88,30 @@ class _MobileProductViewState extends State<MobileProductView> {
       _idSearchQuery = query;
       _searchQuery = ''; // Clear name search when performing ID search
       _currentPage = 1;
+      // Clear stock and production filters when performing other searches
+      _activeStockType = null;
+      _activeStockValue = null;
+      _selectedStockType = null;
+      _selectedStockValue = null;
+      _activeProduction = null;
+      _selectedProduction = null;
     });
     _loadProducts();
   }
 
   void _loadProducts() {
     final productBloc = BlocProvider.of<ProductBloc>(context);
+    
+    // When stock or production filter is active, load all products for client-side filtering
+    if ((_activeStockType != null && _activeStockValue != null) || _activeProduction != null) {
+      productBloc.add(
+        LoadPaginatedProducts(
+          page: 1,
+          pageSize: 10000, // Load all products for stock/production filtering
+        ),
+      );
+      return;
+    }
     
     // Priority: ID search > category filter > name search > all products
     if (_idSearchQuery.isNotEmpty) {
@@ -161,6 +192,20 @@ class _MobileProductViewState extends State<MobileProductView> {
     super.dispose();
   }
 
+  String _buildFilterText() {
+    List<String> filters = [];
+    
+    if (_activeStockType != null && _activeStockValue != null) {
+      filters.add('${_activeStockType == 'sole_stock' ? 'Sole Stock' : 'Global Stock'} = $_activeStockValue');
+    }
+    
+    if (_activeProduction != null) {
+      filters.add('Production: ${_activeProduction! ? 'Yes' : 'No'}');
+    }
+    
+    return 'Filtered: ${filters.join(' & ')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,33 +225,33 @@ class _MobileProductViewState extends State<MobileProductView> {
         children: [
           // Toggle button to show/hide filters
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             color: Colors.blue.shade50,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _showFilters ? 'Hide Filters & Search' : 'Show Filters & Search',
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _showFilters = !_showFilters;
+                });
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _showFilters ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.blue.shade700,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _showFilters ? 'Hide' : 'Show',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: Colors.blue.shade700,
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    _showFilters ? Icons.expand_less : Icons.expand_more,
-                    color: Colors.blue.shade700,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _showFilters = !_showFilters;
-                    });
-                  },
-                  tooltip: _showFilters ? 'Hide filters' : 'Show filters',
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // Search Field, Category Filter, and Sync Button (collapsible)
@@ -320,6 +365,202 @@ class _MobileProductViewState extends State<MobileProductView> {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  // Stock Filter Section
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.inventory_2, color: Colors.orange.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Stock Filter',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            // Stock Type Dropdown
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Stock Type',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  DropdownButtonFormField<String>(
+                                    value: _selectedStockType,
+                                    decoration: InputDecoration(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                    ),
+                                    hint: const Text('Select type', style: TextStyle(fontSize: 12)),
+                                    items: const [
+                                      DropdownMenuItem(value: 'sole_stock', child: Text('Sole Stock', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: 'global_stock', child: Text('Global Stock', style: TextStyle(fontSize: 12))),
+                                    ],
+                                    onChanged: (String? value) {
+                                      setState(() {
+                                        _selectedStockType = value;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Stock Value Dropdown
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Stock Value',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  DropdownButtonFormField<String>(
+                                    value: _selectedStockValue,
+                                    decoration: InputDecoration(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                    ),
+                                    hint: const Text('Select value', style: TextStyle(fontSize: 12)),
+                                    items: const [
+                                      DropdownMenuItem(value: '0', child: Text('0', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: '1', child: Text('1', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: '2', child: Text('2', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: '3', child: Text('3', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: '4', child: Text('4', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: '5', child: Text('5', style: TextStyle(fontSize: 12))),
+                                    ],
+                                    onChanged: (String? value) {
+                                      setState(() {
+                                        _selectedStockValue = value;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Production Filter
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Production Status',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            DropdownButtonFormField<bool>(
+                              value: _selectedProduction,
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              hint: const Text('Select production', style: TextStyle(fontSize: 12)),
+                              items: const [
+                                DropdownMenuItem(value: true, child: Text('Yes', style: TextStyle(fontSize: 12))),
+                                DropdownMenuItem(value: false, child: Text('No', style: TextStyle(fontSize: 12))),
+                              ],
+                              onChanged: (bool? value) {
+                                setState(() {
+                                  _selectedProduction = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: (_selectedStockType != null && _selectedStockValue != null) || _selectedProduction != null
+                                    ? () {
+                                        setState(() {
+                                          _activeStockType = _selectedStockType;
+                                          _activeStockValue = _selectedStockValue;
+                                          _activeProduction = _selectedProduction;
+                                          _currentPage = 1;
+                                          // Clear other filters when applying stock/production filter
+                                          _searchQuery = '';
+                                          _idSearchQuery = '';
+                                          _selectedCategory = null;
+                                          _searchController.clear();
+                                          _idSearchController.clear();
+                                        });
+                                        _loadProducts();
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.filter_alt, size: 16),
+                                label: const Text('Apply Filter', style: TextStyle(fontSize: 12)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade600,
+                                  foregroundColor: Colors.white,
+                                  disabledBackgroundColor: Colors.grey.shade300,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                              ),
+                            ),
+                            if (_activeStockType != null || _activeStockValue != null || _activeProduction != null) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedStockType = null;
+                                      _selectedStockValue = null;
+                                      _activeStockType = null;
+                                      _activeStockValue = null;
+                                      _selectedProduction = null;
+                                      _activeProduction = null;
+                                      _currentPage = 1;
+                                    });
+                                    _loadProducts();
+                                  },
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  label: const Text('Clear Filter', style: TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red.shade600,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   // Category Filter and Sync Button in one row
                   Row(
                     children: [
@@ -358,6 +599,13 @@ class _MobileProductViewState extends State<MobileProductView> {
                                     setState(() {
                                       _selectedCategory = newValue == 'All' ? null : newValue;
                                       _currentPage = 1;
+                                      // Clear stock and production filters when changing category
+                                      _activeStockType = null;
+                                      _activeStockValue = null;
+                                      _selectedStockType = null;
+                                      _selectedStockValue = null;
+                                      _activeProduction = null;
+                                      _selectedProduction = null;
                                     });
                                     _loadProducts();
                                   },
@@ -430,10 +678,43 @@ class _MobileProductViewState extends State<MobileProductView> {
           }
 
           if (state is ProductsLoaded) {
-            final products = state.products;
+            var products = state.products;
             final totalItems = state.totalItems;
             final hasNextPage = state.hasNextPage;
             final hasPreviousPage = state.hasPreviousPage;
+
+            // Apply stock filter if active
+            if (_activeStockType != null && _activeStockValue != null) {
+              final targetValue = int.tryParse(_activeStockValue!) ?? -1;
+              products = products.where((product) {
+                try {
+                  if (product.uPrices.isEmpty || product.uPrices == 'null') {
+                    return false;
+                  }
+                  final priceList = jsonDecode(product.uPrices) as List<dynamic>;
+                  
+                  // Check if any price item has the active stock type with the active value
+                  return priceList.any((priceItem) {
+                    if (priceItem is Map<String, dynamic>) {
+                      if (priceItem.containsKey(_activeStockType!) && priceItem[_activeStockType!] != null) {
+                        final stock = int.tryParse(priceItem[_activeStockType!].toString()) ?? -1;
+                        return stock == targetValue;
+                      }
+                    }
+                    return false;
+                  });
+                } catch (e) {
+                  return false;
+                }
+              }).toList();
+            }
+            
+            // Apply production filter if active
+            if (_activeProduction != null) {
+              products = products.where((product) {
+                return product.production == _activeProduction;
+              }).toList();
+            }
 
             if (products.isEmpty) {
               return const Center(
@@ -453,22 +734,45 @@ class _MobileProductViewState extends State<MobileProductView> {
 
             return Column(
               children: [
-                // Page info header
+                // Page info header or filter info
                 Container(
                   padding: const EdgeInsets.all(12),
-                  color: Colors.grey.shade100,
+                  color: (_activeStockType != null && _activeStockValue != null) || _activeProduction != null
+                      ? Colors.orange.shade100
+                      : Colors.grey.shade100,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Page $_currentPage',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                      Expanded(
+                        child: (_activeStockType != null && _activeStockValue != null) || _activeProduction != null
+                            ? Row(
+                                children: [
+                                  Icon(Icons.filter_alt, color: Colors.orange.shade700, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _buildFilterText(),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: Colors.orange.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Text(
+                                'Page $_currentPage',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
                       ),
                       Text(
-                        'Total: $totalItems products',
+                        (_activeStockType != null && _activeStockValue != null) || _activeProduction != null
+                            ? 'Found: ${products.length} products'
+                            : 'Total: $totalItems products',
                         style: TextStyle(
                           color: Colors.grey.shade700,
                           fontSize: 14,
@@ -493,60 +797,61 @@ class _MobileProductViewState extends State<MobileProductView> {
                   ),
                 ),
 
-                // Pagination controls
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.shade300,
-                        blurRadius: 4,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: ElevatedButton.icon(
-                          onPressed: hasPreviousPage ? _previousPage : null,
-                          icon: const Icon(Icons.arrow_back, size: 16),
-                          label: const Text('Prev', style: TextStyle(fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.grey.shade300,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                // Pagination controls (hidden when stock or production filter is active)
+                if ((_activeStockType == null || _activeStockValue == null) && _activeProduction == null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.shade300,
+                          blurRadius: 4,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: ElevatedButton.icon(
+                            onPressed: hasPreviousPage ? _previousPage : null,
+                            icon: const Icon(Icons.arrow_back, size: 16),
+                            label: const Text('Prev', style: TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
                           ),
                         ),
-                      ),
-                      Flexible(
-                        flex: 2,
-                        child: Text(
-                          'Showing ${(_currentPage - 1) * _pageSize + 1}-${(_currentPage - 1) * _pageSize + products.length} of $totalItems',
-                          style: const TextStyle(fontSize: 11),
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Flexible(
-                        child: ElevatedButton.icon(
-                          onPressed: hasNextPage ? _nextPage : null,
-                          icon: const Icon(Icons.arrow_forward, size: 16),
-                          label: const Text('Next', style: TextStyle(fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.grey.shade300,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            'Showing ${(_currentPage - 1) * _pageSize + 1}-${(_currentPage - 1) * _pageSize + products.length} of $totalItems',
+                            style: const TextStyle(fontSize: 11),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                    ],
+                        Flexible(
+                          child: ElevatedButton.icon(
+                            onPressed: hasNextPage ? _nextPage : null,
+                            icon: const Icon(Icons.arrow_forward, size: 16),
+                            label: const Text('Next', style: TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ],
             );
           }
