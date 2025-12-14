@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../common/app_drawer.dart';
+import '../../data/local_database.dart';
 import 'product.dart';
 import 'sync_products_button.dart';
 import 'product_details.dart';
@@ -33,6 +34,8 @@ class _MobileProductViewState extends State<MobileProductView> {
   String? _activeStockValue; // Applied filter
   bool? _selectedProduction; // true or false
   bool? _activeProduction; // Applied filter
+  String? _selectedFilterCategory; // Category filter in stock filter section
+  String? _activeFilterCategory; // Applied category filter
 
   @override
   void initState() {
@@ -44,24 +47,36 @@ class _MobileProductViewState extends State<MobileProductView> {
 
   void _loadCategories() async {
     try {
-      final productBloc = BlocProvider.of<ProductBloc>(context);
-      final state = productBloc.state;
+      print('===== LOADING CATEGORIES FROM DATABASE =====');
       
-      if (state is ProductsLoaded) {
-        final allProducts = state.products;
-        final uniqueCategories = allProducts
-            .where((p) => p.category1 != null && p.category1!.isNotEmpty)
-            .map((p) => p.category1!)
-            .toSet()
-            .toList();
-        uniqueCategories.sort();
-        
-        setState(() {
-          _categories = ['All', ...uniqueCategories];
-        });
-      }
+      // Load all products from local database to get all categories
+      final LocalDatabase localDB = LocalDatabase();
+      final result = await localDB.getLocalPaginatedProducts(1, 100000);
+      final allProducts = result['products'] as List<Product>;
+      
+      print('Total products from database: ${allProducts.length}');
+      
+      // Get all category1 values
+      final allCategory1Values = allProducts.map((p) => p.category1).where((c) => c != null).toList();
+      print('Non-null category1 values: ${allCategory1Values.length}');
+      
+      // Filter and get unique categories (trim whitespace to avoid duplicates)
+      final uniqueCategories = allProducts
+          .where((p) => p.category1 != null && p.category1!.trim().isNotEmpty)
+          .map((p) => p.category1!.trim())
+          .toSet()
+          .toList();
+      uniqueCategories.sort();
+      
+      print('Unique categories found (${uniqueCategories.length}): $uniqueCategories');
+      
+      setState(() {
+        _categories = ['All', ...uniqueCategories];
+        print('Categories set in state (${_categories.length}): $_categories');
+      });
     } catch (e) {
       print('Error loading categories: $e');
+      print('Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -78,6 +93,8 @@ class _MobileProductViewState extends State<MobileProductView> {
       _selectedStockValue = null;
       _activeProduction = null;
       _selectedProduction = null;
+      _activeFilterCategory = null;
+      _selectedFilterCategory = null;
     });
     _loadProducts();
   }
@@ -95,6 +112,8 @@ class _MobileProductViewState extends State<MobileProductView> {
       _selectedStockValue = null;
       _activeProduction = null;
       _selectedProduction = null;
+      _activeFilterCategory = null;
+      _selectedFilterCategory = null;
     });
     _loadProducts();
   }
@@ -102,8 +121,8 @@ class _MobileProductViewState extends State<MobileProductView> {
   void _loadProducts() {
     final productBloc = BlocProvider.of<ProductBloc>(context);
     
-    // When stock or production filter is active, load all products for client-side filtering
-    if ((_activeStockType != null && _activeStockValue != null) || _activeProduction != null) {
+    // When stock, production, or category filter is active, load all products for client-side filtering
+    if ((_activeStockType != null && _activeStockValue != null) || _activeProduction != null || _activeFilterCategory != null) {
       productBloc.add(
         LoadPaginatedProducts(
           page: 1,
@@ -203,6 +222,10 @@ class _MobileProductViewState extends State<MobileProductView> {
       filters.add('Production: ${_activeProduction! ? 'Yes' : 'No'}');
     }
     
+    if (_activeFilterCategory != null) {
+      filters.add('Category: $_activeFilterCategory');
+    }
+    
     return 'Filtered: ${filters.join(' & ')}';
   }
 
@@ -256,12 +279,14 @@ class _MobileProductViewState extends State<MobileProductView> {
           ),
           // Search Field, Category Filter, and Sync Button (collapsible)
           if (_showFilters)
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                children: [
-                  // Name Search Row
-                  Row(
+            Expanded(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    children: [
+                      // Name Search Row
+                      Row(
                     children: [
                       Expanded(
                         child: TextField(
@@ -498,18 +523,57 @@ class _MobileProductViewState extends State<MobileProductView> {
                           ],
                         ),
                         const SizedBox(height: 12),
+                        // Category Filter
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Category',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            DropdownButtonFormField<String>(
+                              value: _selectedFilterCategory,
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              hint: const Text('Select category', style: TextStyle(fontSize: 12)),
+                              menuMaxHeight: 400,
+                              items: _categories
+                                  .where((cat) => cat != 'All')
+                                  .map((String category) {
+                                return DropdownMenuItem<String>(
+                                  value: category,
+                                  child: Text(category, style: const TextStyle(fontSize: 12)),
+                                );
+                              }).toList(),
+                              onChanged: (String? value) {
+                                setState(() {
+                                  _selectedFilterCategory = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                         Row(
                           children: [
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: (_selectedStockType != null && _selectedStockValue != null) || _selectedProduction != null
+                                onPressed: (_selectedStockType != null && _selectedStockValue != null) || _selectedProduction != null || _selectedFilterCategory != null
                                     ? () {
                                         setState(() {
                                           _activeStockType = _selectedStockType;
                                           _activeStockValue = _selectedStockValue;
                                           _activeProduction = _selectedProduction;
+                                          _activeFilterCategory = _selectedFilterCategory;
                                           _currentPage = 1;
-                                          // Clear other filters when applying stock/production filter
+                                          // Clear other filters when applying stock/production/category filter
                                           _searchQuery = '';
                                           _idSearchQuery = '';
                                           _selectedCategory = null;
@@ -529,7 +593,7 @@ class _MobileProductViewState extends State<MobileProductView> {
                                 ),
                               ),
                             ),
-                            if (_activeStockType != null || _activeStockValue != null || _activeProduction != null) ...[
+                            if (_activeStockType != null || _activeStockValue != null || _activeProduction != null || _activeFilterCategory != null) ...[
                               const SizedBox(width: 8),
                               Expanded(
                                 child: ElevatedButton.icon(
@@ -541,6 +605,8 @@ class _MobileProductViewState extends State<MobileProductView> {
                                       _activeStockValue = null;
                                       _selectedProduction = null;
                                       _activeProduction = null;
+                                      _selectedFilterCategory = null;
+                                      _activeFilterCategory = null;
                                       _currentPage = 1;
                                     });
                                     _loadProducts();
@@ -583,6 +649,7 @@ class _MobileProductViewState extends State<MobileProductView> {
                                   isExpanded: true,
                                   underline: const SizedBox(),
                                   hint: const Text('Filter by Category'),
+                                  menuMaxHeight: 400,
                                   items: _categories.map((String category) {
                                     return DropdownMenuItem<String>(
                                       value: category,
@@ -644,6 +711,8 @@ class _MobileProductViewState extends State<MobileProductView> {
                   ),
                 ],
               ),
+            ),
+          ),
             ),
           // Products content
           Expanded(
@@ -715,6 +784,13 @@ class _MobileProductViewState extends State<MobileProductView> {
                 return product.production == _activeProduction;
               }).toList();
             }
+            
+            // Apply category filter if active
+            if (_activeFilterCategory != null) {
+              products = products.where((product) {
+                return product.category1 == _activeFilterCategory;
+              }).toList();
+            }
 
             if (products.isEmpty) {
               return const Center(
@@ -737,14 +813,14 @@ class _MobileProductViewState extends State<MobileProductView> {
                 // Page info header or filter info
                 Container(
                   padding: const EdgeInsets.all(12),
-                  color: (_activeStockType != null && _activeStockValue != null) || _activeProduction != null
+                  color: (_activeStockType != null && _activeStockValue != null) || _activeProduction != null || _activeFilterCategory != null
                       ? Colors.orange.shade100
                       : Colors.grey.shade100,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: (_activeStockType != null && _activeStockValue != null) || _activeProduction != null
+                        child: (_activeStockType != null && _activeStockValue != null) || _activeProduction != null || _activeFilterCategory != null
                             ? Row(
                                 children: [
                                   Icon(Icons.filter_alt, color: Colors.orange.shade700, size: 20),
@@ -770,7 +846,7 @@ class _MobileProductViewState extends State<MobileProductView> {
                               ),
                       ),
                       Text(
-                        (_activeStockType != null && _activeStockValue != null) || _activeProduction != null
+                        (_activeStockType != null && _activeStockValue != null) || _activeProduction != null || _activeFilterCategory != null
                             ? 'Found: ${products.length} products'
                             : 'Total: $totalItems products',
                         style: TextStyle(
@@ -797,8 +873,8 @@ class _MobileProductViewState extends State<MobileProductView> {
                   ),
                 ),
 
-                // Pagination controls (hidden when stock or production filter is active)
-                if ((_activeStockType == null || _activeStockValue == null) && _activeProduction == null)
+                // Pagination controls (hidden when stock, production, or category filter is active)
+                if ((_activeStockType == null || _activeStockValue == null) && _activeProduction == null && _activeFilterCategory == null)
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                     decoration: BoxDecoration(
