@@ -1423,14 +1423,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                   ),
                 );
               },
-              onDataFetched: (List<ProductDetails> productDetailsList) {
+              onDataFetched: (String compositeId, List<ProductDetails> productDetailsList) {
                 ProductDetailsButtonHandler.showProductDetailsDialog(
                   context: context,
                   productName: product.name,
-                  compositeId: ProductDetailsService.generateCompositeId(
-                    product.id,
-                    priceItemId.toString(),
-                  ),
+                  compositeId: compositeId,
                   productDetailsList: productDetailsList,
                   onStockUpdated: () {
                     final productBloc = BlocProvider.of<ProductBloc>(context);
@@ -1569,14 +1566,11 @@ class _PaginatedProductTableState extends State<PaginatedProductTable> {
                 ),
               );
             },
-            onDataFetched: (List<ProductDetails> productDetailsList) {
+            onDataFetched: (String compositeId, List<ProductDetails> productDetailsList) {
               ProductDetailsButtonHandler.showProductDetailsDialog(
                 context: context,
                 productName: product.name,
-                compositeId: ProductDetailsService.generateCompositeId(
-                  product.id,
-                  priceItemId.toString(),
-                ),
+                compositeId: compositeId,
                 productDetailsList: productDetailsList,
                 onStockUpdated: () {
                   final productBloc = BlocProvider.of<ProductBloc>(context);

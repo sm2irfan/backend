@@ -533,7 +533,7 @@ class ProductDetailsButtonHandler {
     required String productName,
     required Map<String, dynamic> priceItem,
     required int priceIndex,
-    required Function(List<ProductDetails>) onDataFetched,
+    required Function(String compositeId, List<ProductDetails>) onDataFetched,
     required Function(String) onError,
     VoidCallback? onStockTypeAdded,
   }) async {
@@ -638,10 +638,10 @@ class ProductDetailsButtonHandler {
         for (final detail in productDetailsList) {
           print('  - $detail');
         }
-        onDataFetched(productDetailsList);
+        onDataFetched(compositeId, productDetailsList);
       } else {
         print('No product details found for composite ID: $compositeId');
-        onDataFetched([]);
+        onDataFetched(compositeId, []);
       }
     } catch (error) {
       print('Error handling price button click: $error');

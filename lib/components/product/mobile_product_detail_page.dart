@@ -1123,14 +1123,11 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
                       priceItem: priceItem,
                       priceIndex: index,
                       onStockTypeAdded: () {},
-                      onDataFetched: (List<ProductDetails> productDetailsList) {
+                      onDataFetched: (String compositeId, List<ProductDetails> productDetailsList) {
                         ProductDetailsButtonHandler.showProductDetailsDialog(
                           context: context,
                           productName: widget.product.name,
-                          compositeId: ProductDetailsService.generateCompositeId(
-                            widget.product.id,
-                            priceItemId.toString(),
-                          ),
+                          compositeId: compositeId,
                           productDetailsList: productDetailsList,
                           onStockUpdated: () {},
                         );

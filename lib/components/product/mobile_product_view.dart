@@ -1097,10 +1097,10 @@ class _MobileProductViewState extends State<MobileProductView> {
         children: [
           Row(
             children: [
-              Icon(Icons.attach_money, size: 16, color: iconColor),
+              Icon(Icons.history, size: 16, color: iconColor),
               const SizedBox(width: 8),
               Text(
-                'Prices',
+                'Purchase History',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -1168,14 +1168,11 @@ class _MobileProductViewState extends State<MobileProductView> {
               onStockTypeAdded: () {
                 // No need to update stock in mobile view (read-only)
               },
-              onDataFetched: (List<ProductDetails> productDetailsList) {
+              onDataFetched: (String compositeId, List<ProductDetails> productDetailsList) {
                 ProductDetailsButtonHandler.showProductDetailsDialog(
                   context: context,
                   productName: product.name,
-                  compositeId: ProductDetailsService.generateCompositeId(
-                    product.id,
-                    priceItemId.toString(),
-                  ),
+                  compositeId: compositeId,
                   productDetailsList: productDetailsList,
                   onStockUpdated: () {
                     // No stock update in mobile view (read-only)
@@ -1276,14 +1273,11 @@ class _MobileProductViewState extends State<MobileProductView> {
             onStockTypeAdded: () {
               // No need to update in mobile view (read-only)
             },
-            onDataFetched: (List<ProductDetails> productDetailsList) {
+            onDataFetched: (String compositeId, List<ProductDetails> productDetailsList) {
               ProductDetailsButtonHandler.showProductDetailsDialog(
                 context: context,
                 productName: product.name,
-                compositeId: ProductDetailsService.generateCompositeId(
-                  product.id,
-                  priceItemId.toString(),
-                ),
+                compositeId: compositeId,
                 productDetailsList: productDetailsList,
                 onStockUpdated: () {
                   // No stock update in mobile view (read-only)
