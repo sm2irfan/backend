@@ -149,9 +149,41 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
         return;
       }
       
-      // If we've already processed all items, reset to start
-      if (_nextOldPriceIndex >= decoded.length) {
-        _nextOldPriceIndex = 0;
+      // Find the next item that doesn't have old_price
+      int targetIndex = -1;
+      for (int i = _nextOldPriceIndex; i < decoded.length; i++) {
+        if (decoded[i] is Map<String, dynamic>) {
+          Map<String, dynamic> item = decoded[i];
+          if (!item.containsKey('old_price')) {
+            targetIndex = i;
+            break;
+          }
+        }
+      }
+      
+      // If no item found from current index, search from beginning
+      if (targetIndex == -1) {
+        for (int i = 0; i < _nextOldPriceIndex; i++) {
+          if (decoded[i] is Map<String, dynamic>) {
+            Map<String, dynamic> item = decoded[i];
+            if (!item.containsKey('old_price')) {
+              targetIndex = i;
+              break;
+            }
+          }
+        }
+      }
+      
+      // If still no item found, all items already have old_price
+      if (targetIndex == -1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All items already have old_price attribute'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        _nextOldPriceIndex = 0; // Reset for next time
+        return;
       }
       
       List<Map<String, dynamic>> updatedList = [];
@@ -165,26 +197,23 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
             newItem['id'] = item['id'];
           }
           
-          // Add other properties except old_price
+          // Add other properties
           item.forEach((key, value) {
-            if (key != 'id' && key != 'old_price') {
+            if (key != 'id') {
               newItem[key] = value;
             }
           });
           
-          // Add old_price only to the current index
-          if (i == _nextOldPriceIndex) {
+          // Add old_price only to the target index if it doesn't have it
+          if (i == targetIndex && !item.containsKey('old_price')) {
             newItem['old_price'] = '1';
-          } else if (item.containsKey('old_price')) {
-            // Preserve existing old_price for other items
-            newItem['old_price'] = item['old_price'];
           }
           
           updatedList.add(newItem);
         }
       }
       
-      _nextOldPriceIndex++; // Move to next item for next click
+      _nextOldPriceIndex = targetIndex + 1; // Move to next item for next click
       
       // Format and update the text field
       const encoder = JsonEncoder.withIndent('  ');
@@ -194,7 +223,7 @@ class _MobileProductDetailPageState extends State<MobileProductDetailPage> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Added old_price to item #${_nextOldPriceIndex}'),
+          content: Text('Added old_price to item #${targetIndex + 1}'),
           backgroundColor: Colors.green,
         ),
       );
